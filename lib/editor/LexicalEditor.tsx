@@ -51,18 +51,20 @@ const theme = {
 };
 
 // HTML 到编辑器的初始化插件
-function InitializeEditorPlugin({ html }: { html: string }) {
+function InitializeEditorPlugin({ html, onChange }: { html: string; onChange?: (html: string) => void }) {
     const [editor] = useLexicalComposerContext();
 
     useEffect(() => {
         if (!html) return;
 
         editor.update(() => {
+            console.log('🔄 InitializeEditorPlugin: Updating editor with content');
             const root = $getRoot();
             root.clear();
 
             // 如果是纯文本（不包含HTML标签），转换为段落
             if (!html.includes('<') && !html.includes('>')) {
+                console.log('📝 InitializeEditorPlugin: Detected plain text, converting to paragraphs');
                 // 纯文本：按换行符分割成段落
                 const lines = html.split('\n');
                 lines.forEach((line) => {
@@ -84,6 +86,7 @@ function InitializeEditorPlugin({ html }: { html: string }) {
                     }
                 });
             } else {
+                console.log('<html> InitializeEditorPlugin: Detected HTML, parsing directly');
                 // HTML内容：直接解析
                 const parser = new DOMParser();
                 const dom = parser.parseFromString(html, 'text/html');
@@ -101,6 +104,26 @@ function InitializeEditorPlugin({ html }: { html: string }) {
                 }
             }
         });
+
+        // Manually trigger onChange to ensure parent state is synced with the formatted HTML
+        if (onChange) {
+            // We need to wait for the update to be applied to the editor state
+            // editor.getEditorState().read() inside a timeout or immediate might work, 
+            // but editor.update is synchronous in terms of state update queueing, 
+            // but the read might need to happen after.
+            // Actually, we can just read it immediately after update in the same cycle if we use editor.getEditorState()
+            // BUT, the update callback above runs in a transaction.
+
+            // Let's use a microtask or setTimeout to ensure we read the *updated* state
+            setTimeout(() => {
+                editor.getEditorState().read(() => {
+                    const formattedHtml = $generateHtmlFromNodes(editor);
+                    console.log('🔄 InitializeEditorPlugin: Syncing formatted HTML to parent:', formattedHtml.length);
+                    onChange(formattedHtml);
+                });
+            }, 0);
+        }
+
     }, []); // 只在初始化时运行一次
 
     return null;
@@ -113,6 +136,7 @@ function OnChangeHandler({ onChange }: { onChange: (html: string) => void }) {
     const handleChange = (editorState: EditorState) => {
         editorState.read(() => {
             const html = $generateHtmlFromNodes(editor);
+            console.log('⚡ OnChangeHandler: Editor content changed, generating HTML length:', html.length);
             onChange(html);
         });
     };
@@ -157,7 +181,7 @@ export default function LexicalEditor({ value, onChange, placeholder = '输入�
                 <LinkPlugin />
                 <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
                 <FloatingToolbarPlugin />
-                <InitializeEditorPlugin html={value} />
+                <InitializeEditorPlugin html={value} onChange={onChange} />
                 <OnChangeHandler onChange={onChange} />
             </div>
         </LexicalComposer>

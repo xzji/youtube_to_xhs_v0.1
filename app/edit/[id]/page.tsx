@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Download, FileText, Play, Eye } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Play } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LexicalEditor from '@/lib/editor/LexicalEditor';
 import { getPreviewStyles, detectTextLanguage, getH1FontFamily } from '@/lib/styles/previewCardStyles';
@@ -43,7 +43,7 @@ export default function EditPage() {
     // Preview State (Manual Refresh)
     const [previewData, setPreviewData] = useState({ title: '', content: '' });
     const [currentPage, setCurrentPage] = useState(1);
-    const totalPages = 12; // Mock total pages for now
+    // totalPages removed (calculated dynamically below)
 
     // Video Player State
     const [currentTime, setCurrentTime] = useState(0);
@@ -76,11 +76,7 @@ export default function EditPage() {
                 setTitle(data.generated?.title || '');
                 setContent(data.generated?.content || '');
 
-                // Initialize preview state
-                setPreviewData({
-                    title: data.generated?.title || '',
-                    content: data.generated?.content || ''
-                });
+                // Note: previewData will be updated via the useEffect below
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -90,6 +86,14 @@ export default function EditPage() {
 
         loadProject();
     }, [params.id]);
+
+    // Real-time preview sync: Update previewData whenever title or content changes
+    useEffect(() => {
+        setPreviewData({
+            title,
+            content
+        });
+    }, [title, content]);
 
     // 测量预览卡片宽度以实现响应式排版
     useEffect(() => {
@@ -141,13 +145,6 @@ export default function EditPage() {
         };
     }, [previewCardRef]); // 添加 previewCardRef 到依赖
 
-    const handlePreview = () => {
-        setPreviewData({
-            title,
-            content
-        });
-    };
-
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
@@ -160,10 +157,71 @@ export default function EditPage() {
         console.log('Seeking to:', seconds);
     };
 
-    const handleExportSingle = async () => {
+    // Pagination state
+    const [pages, setPages] = useState<string[]>([]);
+    const [isPaginating, setIsPaginating] = useState(false);
+    const totalPages = pages.length > 0 ? pages.length : 1;
+
+    // Import pagination helper
+    const { paginateContent } = require('@/lib/utils/PaginationHelper');
+
+    // Pagination effect
+    useEffect(() => {
+        const calculatePages = async () => {
+            if (!cardWidth || !previewData.content) {
+                setPages([previewData.content || '']);
+                return;
+            }
+
+            setIsPaginating(true);
+
+            try {
+                const scale = cardWidth / 540;
+                const totalHeight = cardWidth * (4 / 3);
+                const padding = 48 * scale;
+                const footerHeight = 50 * scale; // Approximate footer height
+                const availableHeight = totalHeight - (padding * 2) - footerHeight;
+
+                // Title height calculation (approximate based on font size and margin)
+                // H1: 38px * scale, LineHeight 1.25, MarginBottom 40px * scale
+                // Height ≈ (38 * 1.25 + 40) * scale
+                const titleHeight = (38 * 1.25 + 40) * scale;
+
+                const result = await paginateContent({
+                    content: previewData.content,
+                    cardWidth: cardWidth - (padding * 2), // Content width
+                    titleHeight: titleHeight,
+                    contentHeight: availableHeight
+                });
+
+                setPages(result.length > 0 ? result : ['']);
+            } catch (error) {
+                console.error('Pagination failed:', error);
+                setPages([previewData.content]);
+            } finally {
+                setIsPaginating(false);
+            }
+        };
+
+        // Debounce pagination
+        const timer = setTimeout(calculatePages, 500);
+        return () => clearTimeout(timer);
+    }, [previewData.content, cardWidth, previewData.title]);
+
+    // Ensure current page is valid
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [totalPages, currentPage]);
+
+    const handleExportSingle = async (pageIndex?: number) => {
         if (!previewCardRef.current) return;
 
         try {
+            // Use passed pageIndex or current state
+            const targetPage = pageIndex !== undefined ? pageIndex : currentPage;
+
             // 导出宽度为1080px (2x)
             const exportWidth = 1080;
             const scale = exportWidth / 540;
@@ -200,21 +258,28 @@ export default function EditPage() {
             // Style title (h1)
             const title = clone.querySelector('h1');
             if (title) {
-                const titleLang = detectTextLanguage(previewData.title || '');
-                (title as HTMLElement).style.cssText = `
-                    font-size: ${38 * scale}px !important;
-                    font-weight: 700 !important;
-                    line-height: 1.25 !important;
-                    letter-spacing: -0.03em !important;
-                    margin-bottom: ${40 * scale}px !important;
-                    font-family: ${getH1FontFamily(titleLang)} !important;
-                    color: #000000 !important;
-                    word-wrap: break-word !important;
-                    background: none !important;
-                    border: none !important;
-                    padding: 0 !important;
-                    margin-top: 0 !important;
-                `;
+                // Only show title on first page
+                if (targetPage === 1) {
+                    const titleLang = detectTextLanguage(previewData.title || '');
+                    (title as HTMLElement).style.cssText = `
+                        font-size: ${38 * scale}px !important;
+                        font-weight: 700 !important;
+                        line-height: 1.25 !important;
+                        letter-spacing: -0.03em !important;
+                        margin-bottom: ${40 * scale}px !important;
+                        font-family: ${getH1FontFamily(titleLang)} !important;
+                        color: #000000 !important;
+                        word-wrap: break-word !important;
+                        background: none !important;
+                        border: none !important;
+                        padding: 0 !important;
+                        margin-top: 0 !important;
+                        display: block !important;
+                    `;
+                } else {
+                    // Hide title on other pages
+                    (title as HTMLElement).style.display = 'none';
+                }
             }
 
             // Style content container
@@ -229,11 +294,25 @@ export default function EditPage() {
                 `;
             }
 
-            // Style content div
-            const contentDiv = clone.querySelector('div:not(:last-child)');
-            if (contentDiv && contentDiv !== contentContainer) {
-                (contentDiv as HTMLElement).removeAttribute('class');
-                (contentDiv as HTMLElement).style.cssText = `
+            // Style content div - robust selector
+            // 1. Try to find the div that follows h1
+            // 2. If no h1 or no sibling, try to find the first div inside contentContainer that is NOT h1
+            let contentDiv: HTMLElement | null = null;
+
+            const titleElement = clone.querySelector('h1');
+            if (titleElement && titleElement.nextElementSibling) {
+                contentDiv = titleElement.nextElementSibling as HTMLElement;
+            } else if (contentContainer) {
+                // Find first div that is not h1
+                const divs = contentContainer.querySelectorAll('div');
+                if (divs.length > 0) {
+                    contentDiv = divs[0] as HTMLElement;
+                }
+            }
+
+            if (contentDiv && contentDiv.tagName === 'DIV') {
+                contentDiv.removeAttribute('class');
+                contentDiv.style.cssText = `
                     font-size: ${20 * scale}px !important;
                     line-height: 1.7 !important;
                     color: #333333 !important;
@@ -243,15 +322,12 @@ export default function EditPage() {
                 `;
 
                 // Apply styles to all HTML elements inside content
-                const elements = (contentDiv as HTMLElement).querySelectorAll('*');
+                const elements = contentDiv.querySelectorAll('*');
                 elements.forEach((el) => {
                     const tag = el.tagName.toLowerCase();
                     const htmlEl = el as HTMLElement;
 
-                    // 清除class
                     htmlEl.removeAttribute('class');
-
-                    // 基础样式覆盖
                     htmlEl.style.background = 'none';
                     htmlEl.style.border = 'none';
                     htmlEl.style.margin = '0';
@@ -309,7 +385,7 @@ export default function EditPage() {
                 });
             }
 
-            // Style page number - find last div
+            // Style page number
             const allDivs = clone.querySelectorAll('div');
             const pageNum = allDivs[allDivs.length - 1];
             if (pageNum) {
@@ -384,7 +460,7 @@ export default function EditPage() {
             document.body.removeChild(iframe);
 
             const link = document.createElement('a');
-            link.download = `${previewData.title || 'preview'}_page_${currentPage}.png`;
+            link.download = `${previewData.title || 'preview'}_page_${targetPage}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
 
@@ -396,12 +472,15 @@ export default function EditPage() {
     };
 
     const handleExportAll = async () => {
-        // 暂时导出相同内容的所有页面
-        // TODO: 实现内容分页逻辑
+        // 导出所有页面
         for (let i = 1; i <= totalPages; i++) {
             try {
-                // 使用与单页导出相同的逻辑
-                await handleExportSingle();
+                // 切换到该页
+                setCurrentPage(i);
+                // 等待渲染
+                await new Promise(resolve => setTimeout(resolve, 500));
+                // 导出，传入当前页码
+                await handleExportSingle(i);
                 // 小延迟避免浏览器阻止多次下载
                 await new Promise(resolve => setTimeout(resolve, 300));
             } catch (error) {
@@ -489,13 +568,7 @@ export default function EditPage() {
                 <div className="w-[40%] flex flex-col bg-white border border-[#E5E5E5] rounded-xl shadow-sm overflow-hidden relative">
                     {/* Toolbar */}
                     <div className="px-5 py-3 border-b border-[#E5E5E5] flex justify-end items-center bg-white shrink-0">
-                        <button
-                            onClick={handlePreview}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
-                        >
-                            <Eye className="w-3.5 h-3.5" />
-                            预览
-                        </button>
+                        <span className="text-xs text-gray-400 font-medium">实时预览</span>
                     </div>
 
                     {/* Editor Area - 统一滚动容器 */}
@@ -537,11 +610,19 @@ export default function EditPage() {
                             </span>
                         </h2>
                         <div className="flex gap-2.5">
-                            <button onClick={handleExportSingle} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-white border border-[#E5E5E5] text-gray-900 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm">
-                                <FileText className="w-3.5 h-3.5" />
+                            <button
+                                onClick={() => handleExportSingle()}
+                                title="下载当前页面"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-white border border-[#E5E5E5] text-gray-900 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm cursor-pointer"
+                            >
+                                <Download className="w-3.5 h-3.5" />
                                 单页
                             </button>
-                            <button onClick={handleExportAll} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-black border border-black text-white rounded-lg hover:opacity-90 transition-all shadow-sm">
+                            <button
+                                onClick={handleExportAll}
+                                title="下载全部页面"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-black border border-black text-white rounded-lg hover:opacity-90 transition-all shadow-sm cursor-pointer"
+                            >
                                 <Download className="w-3.5 h-3.5" />
                                 全部导出
                             </button>
@@ -560,27 +641,31 @@ export default function EditPage() {
                             }}
                         >
                             <div className="flex-1 overflow-hidden preview-content">
-                                <h1
-                                    className={detectTextLanguage(previewData.title || '')}
-                                    style={{
-                                        fontSize: `${38 * (cardWidth / 540)}px`,
-                                        fontWeight: 700,
-                                        lineHeight: 1.25,
-                                        letterSpacing: '-0.03em',
-                                        marginBottom: `${40 * (cardWidth / 540)}px`,
-                                        fontFamily: getH1FontFamily(detectTextLanguage(previewData.title || '')),
-                                        color: '#000000',
-                                    }}
-                                >
-                                    {previewData.title || '标题预览'}
-                                </h1>
+                                {currentPage === 1 && (
+                                    <h1
+                                        className={detectTextLanguage(previewData.title || '')}
+                                        style={{
+                                            fontSize: `${38 * (cardWidth / 540)}px`,
+                                            fontWeight: 700,
+                                            lineHeight: 1.25,
+                                            letterSpacing: '-0.03em',
+                                            marginBottom: `${40 * (cardWidth / 540)}px`,
+                                            fontFamily: getH1FontFamily(detectTextLanguage(previewData.title || '')),
+                                            color: '#000000',
+                                        }}
+                                    >
+                                        {previewData.title || '标题预览'}
+                                    </h1>
+                                )}
                                 <div
                                     style={{
                                         fontSize: `${20 * (cardWidth / 540)}px`,
                                         lineHeight: 1.7,
                                         color: '#333333',
                                     }}
-                                    dangerouslySetInnerHTML={{ __html: previewData.content || '<p>内容预览...</p>' }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: (pages.length > 0 ? pages[currentPage - 1] : previewData.content) || '<p>内容预览...</p>'
+                                    }}
                                 />
                             </div>
                             <div
@@ -600,7 +685,12 @@ export default function EditPage() {
                         <div className="flex items-center gap-4 mt-5">
                             <button
                                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                                className="w-9 h-9 rounded-full bg-white border border-[#E5E5E5] flex items-center justify-center text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+                                disabled={currentPage === 1}
+                                title="上一页"
+                                className={`w-9 h-9 rounded-full bg-white border border-[#E5E5E5] flex items-center justify-center transition-all ${currentPage === 1
+                                    ? 'text-gray-300 cursor-not-allowed opacity-50'
+                                    : 'text-gray-500 hover:text-gray-900 hover:border-gray-400 cursor-pointer'
+                                    }`}
                             >
                                 <ChevronLeft className="w-4 h-4" />
                             </button>
@@ -609,7 +699,12 @@ export default function EditPage() {
                             </span>
                             <button
                                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                                className="w-9 h-9 rounded-full bg-white border border-[#E5E5E5] flex items-center justify-center text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+                                disabled={currentPage === totalPages}
+                                title="下一页"
+                                className={`w-9 h-9 rounded-full bg-white border border-[#E5E5E5] flex items-center justify-center transition-all ${currentPage === totalPages
+                                    ? 'text-gray-300 cursor-not-allowed opacity-50'
+                                    : 'text-gray-500 hover:text-gray-900 hover:border-gray-400 cursor-pointer'
+                                    }`}
                             >
                                 <ChevronRight className="w-4 h-4" />
                             </button>
