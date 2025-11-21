@@ -5,6 +5,9 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Download, FileText, Play, Eye } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import LexicalEditor from '@/lib/editor/LexicalEditor';
+import { getPreviewStyles, detectTextLanguage, getH1FontFamily } from '@/lib/styles/previewCardStyles';
+import '@/lib/styles/previewCard.css';
 
 interface ProjectData {
     metadata: {
@@ -48,6 +51,9 @@ export default function EditPage() {
     const titleRef = useRef<HTMLTextAreaElement>(null);
     const previewCardRef = useRef<HTMLDivElement>(null);
 
+    // 响应式排版状态
+    const [cardWidth, setCardWidth] = useState(540); // 默认540px
+
     // Auto-resize title textarea
     useEffect(() => {
         if (titleRef.current) {
@@ -85,6 +91,56 @@ export default function EditPage() {
         loadProject();
     }, [params.id]);
 
+    // 测量预览卡片宽度以实现响应式排版
+    useEffect(() => {
+        // 使用 setTimeout 确保 DOM 已完全渲染
+        const timer = setTimeout(() => {
+            console.log('🔍 Checking preview card ref...', !!previewCardRef.current);
+
+            if (!previewCardRef.current) {
+                console.warn('⚠️ Preview card ref is null!');
+                return;
+            }
+
+            // 立即测量一次初始宽度
+            const initialWidth = previewCardRef.current.offsetWidth;
+            console.log('📏 Initial card width:', initialWidth, 'px');
+
+            if (initialWidth > 0) {
+                setCardWidth(initialWidth);
+            }
+
+            const resizeObserver = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    const newWidth = entry.contentRect.width;
+                    console.log('📐 Card width changed:', newWidth, 'px | Browser:', window.innerWidth, 'px');
+                    setCardWidth(newWidth);
+                }
+            });
+
+            resizeObserver.observe(previewCardRef.current);
+
+            // 额外监听窗口大小变化
+            const handleWindowResize = () => {
+                if (previewCardRef.current) {
+                    const actualWidth = previewCardRef.current.offsetWidth;
+                    console.log('🪟 Window resized | Card:', actualWidth, 'px | Browser:', window.innerWidth, 'px');
+                }
+            };
+
+            window.addEventListener('resize', handleWindowResize);
+
+            return () => {
+                resizeObserver.disconnect();
+                window.removeEventListener('resize', handleWindowResize);
+            };
+        }, 100); // 延迟 100ms 确保 DOM 渲染完成
+
+        return () => {
+            clearTimeout(timer);
+        };
+    }, [previewCardRef]); // 添加 previewCardRef 到依赖
+
     const handlePreview = () => {
         setPreviewData({
             title,
@@ -108,111 +164,249 @@ export default function EditPage() {
         if (!previewCardRef.current) return;
 
         try {
-            // Clone the card element to avoid affecting the displayed one
+            // 导出宽度为1080px (2x)
+            const exportWidth = 1080;
+            const scale = exportWidth / 540;
+
+            // Clone the card element
             const originalCard = previewCardRef.current;
             const clone = originalCard.cloneNode(true) as HTMLElement;
 
-            // Remove all Tailwind classes and apply only inline styles
+            // 移除所有class属性
+            clone.removeAttribute('class');
+
+            // Apply export styles
             clone.style.cssText = `
-                background-color: #ffffff;
-                width: 540px;
-                aspect-ratio: 3/4;
-                padding: 48px;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-                border-radius: 2px;
-                position: relative;
+                background-color: #ffffff !important;
+                width: ${exportWidth}px !important;
+                aspect-ratio: 3/4 !important;
+                padding: ${48 * scale}px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                position: relative !important;
+                box-sizing: border-box !important;
+                margin: 0 !important;
             `;
 
-            // Style all child elements
-            const title = clone.querySelector('h2');
+            // 清除所有子元素的class
+            const allElements = clone.querySelectorAll('*');
+            allElements.forEach(el => {
+                el.removeAttribute('class');
+            });
+
+            // Style title (h1)
+            const title = clone.querySelector('h1');
             if (title) {
+                const titleLang = detectTextLanguage(previewData.title || '');
                 (title as HTMLElement).style.cssText = `
-                    font-size: 44px;
-                    font-weight: 800;
-                    line-height: 1.25;
-                    letter-spacing: -0.03em;
-                    margin-bottom: 40px;
-                    color: #000000;
-                    word-wrap: break-word;
+                    font-size: ${38 * scale}px !important;
+                    font-weight: 700 !important;
+                    line-height: 1.25 !important;
+                    letter-spacing: -0.03em !important;
+                    margin-bottom: ${40 * scale}px !important;
+                    font-family: ${getH1FontFamily(titleLang)} !important;
+                    color: #000000 !important;
+                    word-wrap: break-word !important;
+                    background: none !important;
+                    border: none !important;
+                    padding: 0 !important;
+                    margin-top: 0 !important;
                 `;
             }
 
-            const content = clone.querySelectorAll('div')[1];
-            if (content) {
-                (content as HTMLElement).style.cssText = `
-                    font-size: 25px;
-                    line-height: 1.7;
-                    color: #1F2937;
-                    white-space: pre-wrap;
-                    word-wrap: break-word;
+            // Style content container
+            const contentContainer = clone.querySelector('.preview-content, [class*="preview"]') || clone.children[0];
+            if (contentContainer) {
+                (contentContainer as HTMLElement).removeAttribute('class');
+                (contentContainer as HTMLElement).style.cssText = `
+                    flex: 1 !important;
+                    overflow: hidden !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
                 `;
             }
 
-            const pageNum = clone.querySelectorAll('div')[2];
+            // Style content div
+            const contentDiv = clone.querySelector('div:not(:last-child)');
+            if (contentDiv && contentDiv !== contentContainer) {
+                (contentDiv as HTMLElement).removeAttribute('class');
+                (contentDiv as HTMLElement).style.cssText = `
+                    font-size: ${20 * scale}px !important;
+                    line-height: 1.7 !important;
+                    color: #333333 !important;
+                    background: none !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                `;
+
+                // Apply styles to all HTML elements inside content
+                const elements = (contentDiv as HTMLElement).querySelectorAll('*');
+                elements.forEach((el) => {
+                    const tag = el.tagName.toLowerCase();
+                    const htmlEl = el as HTMLElement;
+
+                    // 清除class
+                    htmlEl.removeAttribute('class');
+
+                    // 基础样式覆盖
+                    htmlEl.style.background = 'none';
+                    htmlEl.style.border = 'none';
+                    htmlEl.style.margin = '0';
+                    htmlEl.style.padding = '0';
+
+                    if (tag === 'h2') {
+                        htmlEl.style.fontSize = `${32 * scale}px`;
+                        htmlEl.style.fontWeight = '700';
+                        htmlEl.style.color = '#000000';
+                        htmlEl.style.fontFamily = 'Times New Roman, serif';
+                        htmlEl.style.marginBottom = `${16 * scale}px`;
+                        htmlEl.style.marginTop = `${24 * scale}px`;
+                    } else if (tag === 'h3') {
+                        htmlEl.style.fontSize = `${26 * scale}px`;
+                        htmlEl.style.fontWeight = '700';
+                        htmlEl.style.color = '#000000';
+                        htmlEl.style.fontFamily = 'Times New Roman, serif';
+                        htmlEl.style.marginBottom = `${12 * scale}px`;
+                        htmlEl.style.marginTop = `${20 * scale}px`;
+                    } else if (tag === 'p') {
+                        htmlEl.style.fontSize = `${20 * scale}px`;
+                        htmlEl.style.color = '#333333';
+                        htmlEl.style.marginBottom = `${12 * scale}px`;
+                    } else if (tag === 'ul' || tag === 'ol') {
+                        htmlEl.style.fontSize = `${22 * scale}px`;
+                        htmlEl.style.paddingLeft = `${20 * scale}px`;
+                        htmlEl.style.color = '#333333';
+                        htmlEl.style.marginBottom = `${12 * scale}px`;
+                    } else if (tag === 'li') {
+                        htmlEl.style.color = '#333333';
+                        htmlEl.style.marginBottom = `${4 * scale}px`;
+                    } else if (tag === 'a') {
+                        htmlEl.style.color = '#4a9eff';
+                        htmlEl.style.textDecoration = 'none';
+                    } else if (tag === 'code') {
+                        htmlEl.style.fontFamily = 'JetBrains Mono, monospace';
+                        htmlEl.style.backgroundColor = '#f5f5f5';
+                        htmlEl.style.padding = `${4 * scale}px ${8 * scale}px`;
+                        htmlEl.style.borderRadius = '4px';
+                        htmlEl.style.color = '#333333';
+                    } else if (tag === 'mark') {
+                        htmlEl.style.backgroundColor = '#fff59d';
+                        htmlEl.style.borderBottom = '2px solid #ff9800';
+                        htmlEl.style.borderRadius = '4px';
+                        htmlEl.style.padding = '2px 6px';
+                        htmlEl.style.fontWeight = 'bold';
+                        htmlEl.style.color = '#000000';
+                    } else if (tag === 'blockquote') {
+                        htmlEl.style.borderLeft = `4px solid #4a9eff`;
+                        htmlEl.style.paddingLeft = `${16 * scale}px`;
+                        htmlEl.style.color = '#666666';
+                        htmlEl.style.fontStyle = 'italic';
+                        htmlEl.style.marginBottom = `${12 * scale}px`;
+                    }
+                });
+            }
+
+            // Style page number - find last div
+            const allDivs = clone.querySelectorAll('div');
+            const pageNum = allDivs[allDivs.length - 1];
             if (pageNum) {
+                pageNum.removeAttribute('class');
                 (pageNum as HTMLElement).style.cssText = `
-                    text-align: right;
-                    font-size: 18px;
-                    font-weight: 500;
-                    color: #9CA3AF;
-                    margin-top: auto;
-                    padding-top: 24px;
+                    text-align: right !important;
+                    font-size: ${14 * scale}px !important;
+                    font-weight: 300 !important;
+                    color: #9CA3AF !important;
+                    padding-top: ${24 * scale}px !important;
+                    margin-top: auto !important;
+                    background: none !important;
+                    border: none !important;
                 `;
             }
 
-            // Create a temporary container
-            const tempContainer = document.createElement('div');
-            tempContainer.style.cssText = 'position: absolute; left: -9999px; top: 0;';
-            tempContainer.appendChild(clone);
-            document.body.appendChild(tempContainer);
+            // --- Iframe Isolation Strategy ---
+            const iframe = document.createElement('iframe');
+            iframe.style.cssText = 'position: absolute; left: -9999px; top: 0; width: 0; height: 0; border: 0;';
+            document.body.appendChild(iframe);
 
-            // Capture at 2x scale for 1080px width
-            const canvas = await html2canvas(clone, {
-                scale: 2,
+            // Wait for iframe to load
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const doc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (!doc) {
+                throw new Error('Could not access iframe document');
+            }
+
+            // Write clean HTML structure
+            doc.open();
+            doc.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <style>
+                        /* Reset styles */
+                        * { box-sizing: border-box; margin: 0; padding: 0; }
+                        body { margin: 0; padding: 0; background: white; font-family: sans-serif; }
+                    </style>
+                    <!-- Google Fonts -->
+                    <link rel="preconnect" href="https://fonts.googleapis.com">
+                    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+                </head>
+                <body></body>
+                </html>
+            `);
+            doc.close();
+
+            // Wait for fonts to load (simple delay)
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Append clone to iframe body
+            doc.body.appendChild(clone);
+
+            // Capture using html2canvas ON THE IFRAME BODY
+            const canvas = await html2canvas(doc.body, {
+                scale: 1, // Already scaled via CSS
                 backgroundColor: '#ffffff',
                 logging: false,
                 useCORS: true,
+                allowTaint: true,
+                width: exportWidth,
+                height: exportWidth * (4 / 3), // 3:4 aspect ratio
+                windowWidth: exportWidth,
+                windowHeight: exportWidth * (4 / 3),
             });
 
             // Clean up
-            document.body.removeChild(tempContainer);
+            document.body.removeChild(iframe);
 
             const link = document.createElement('a');
             link.download = `${previewData.title || 'preview'}_page_${currentPage}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
+
+            console.log('✅ Export successful via iframe isolation!');
         } catch (error) {
-            console.error('Export failed:', error);
-            alert('导出失败，请查看控制台了解详情');
+            console.error('❌ Export failed:', error);
+            alert('导出失败：' + (error as Error).message);
         }
     };
 
     const handleExportAll = async () => {
-        if (!previewCardRef.current) return;
-
-        try {
-            // For now, export all pages with the same content
-            // TODO: Implement content pagination logic
-            for (let i = 1; i <= totalPages; i++) {
-                const canvas = await html2canvas(previewCardRef.current, {
-                    scale: 2,
-                    backgroundColor: '#ffffff',
-                    logging: false,
-                });
-
-                const link = document.createElement('a');
-                link.download = `${previewData.title || 'preview'}_page_${i}.png`;
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-
-                // Small delay between downloads
+        // 暂时导出相同内容的所有页面
+        // TODO: 实现内容分页逻辑
+        for (let i = 1; i <= totalPages; i++) {
+            try {
+                // 使用与单页导出相同的逻辑
+                await handleExportSingle();
+                // 小延迟避免浏览器阻止多次下载
                 await new Promise(resolve => setTimeout(resolve, 300));
+            } catch (error) {
+                console.error(`Export page ${i} failed:`, error);
             }
-        } catch (error) {
-            console.error('Export all failed:', error);
         }
     };
 
@@ -304,32 +498,31 @@ export default function EditPage() {
                         </button>
                     </div>
 
-                    {/* Editor Area */}
+                    {/* Editor Area - 统一滚动容器 */}
                     <div className="flex-1 overflow-y-auto px-10 py-8">
-                        <div className="max-w-none">
-                            <div className="relative mb-6 flex items-start gap-2">
-                                <textarea
-                                    ref={titleRef}
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    maxLength={30}
-                                    placeholder="输入标题..."
-                                    className="flex-1 text-2xl font-bold text-gray-900 placeholder:text-gray-300 border-none outline-none focus:ring-0 focus:outline-none p-0 bg-transparent resize-none leading-tight tracking-tight overflow-hidden"
-                                    rows={1}
-                                    style={{ height: 'auto', minHeight: '40px', maxHeight: '80px' }}
-                                />
-                                <span className="text-xs text-gray-400 font-medium pt-2 shrink-0 select-none">
-                                    {title.length}/30
-                                </span>
-                            </div>
-
+                        {/* 标题 */}
+                        <div className="relative mb-6 flex items-start gap-2">
                             <textarea
-                                value={content}
-                                onChange={(e) => setContent(e.target.value)}
-                                placeholder="开始写作..."
-                                className="w-full text-[15px] leading-relaxed text-gray-700 placeholder:text-gray-300 border-none outline-none focus:ring-0 focus:outline-none p-0 bg-transparent resize-none h-[calc(100vh-300px)]"
+                                ref={titleRef}
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                maxLength={30}
+                                placeholder="输入标题..."
+                                className="flex-1 text-2xl font-bold text-gray-900 placeholder:text-gray-300 border-none outline-none focus:ring-0 focus:outline-none p-0 bg-transparent resize-none leading-tight tracking-tight overflow-hidden"
+                                rows={1}
+                                style={{ height: 'auto', minHeight: '40px', maxHeight: '80px' }}
                             />
+                            <span className="text-xs text-gray-400 font-medium pt-2 shrink-0 select-none">
+                                {title.length}/30
+                            </span>
                         </div>
+
+                        {/* 正文编辑器 */}
+                        <LexicalEditor
+                            value={content}
+                            onChange={setContent}
+                            placeholder="开始写作..."
+                        />
                     </div>
                 </div>
 
@@ -337,7 +530,12 @@ export default function EditPage() {
                 <div className="w-[32%] flex flex-col overflow-hidden">
                     {/* Header */}
                     <div className="flex justify-between items-center mb-4 px-1">
-                        <h2 className="text-base font-semibold text-gray-900">效果预览</h2>
+                        <h2 className="text-base font-semibold text-gray-900">
+                            效果预览
+                            <span className="ml-2 text-xs text-gray-400 font-normal">
+                                (宽度: {Math.round(cardWidth)}px, 标题: {Math.round(38 * (cardWidth / 540))}px)
+                            </span>
+                        </h2>
                         <div className="flex gap-2.5">
                             <button onClick={handleExportSingle} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-white border border-[#E5E5E5] text-gray-900 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm">
                                 <FileText className="w-3.5 h-3.5" />
@@ -358,26 +556,41 @@ export default function EditPage() {
                             className="bg-white w-full max-w-[540px] aspect-[3/4] p-12 flex flex-col justify-between shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] rounded-[2px] overflow-hidden relative"
                             style={{
                                 backgroundColor: '#ffffff',
-                                color: '#1F2937'
+                                padding: `${48 * (cardWidth / 540)}px`,
                             }}
                         >
-                            <div className="flex-1 overflow-hidden">
-                                <h2
-                                    className="text-[44px] font-extrabold leading-[1.25] tracking-tight mb-10 break-words"
-                                    style={{ color: '#000000' }}
+                            <div className="flex-1 overflow-hidden preview-content">
+                                <h1
+                                    className={detectTextLanguage(previewData.title || '')}
+                                    style={{
+                                        fontSize: `${38 * (cardWidth / 540)}px`,
+                                        fontWeight: 700,
+                                        lineHeight: 1.25,
+                                        letterSpacing: '-0.03em',
+                                        marginBottom: `${40 * (cardWidth / 540)}px`,
+                                        fontFamily: getH1FontFamily(detectTextLanguage(previewData.title || '')),
+                                        color: '#000000',
+                                    }}
                                 >
                                     {previewData.title || '标题预览'}
-                                </h2>
+                                </h1>
                                 <div
-                                    className="text-[25px] leading-[1.7] whitespace-pre-wrap break-words line-clamp-[12]"
-                                    style={{ color: '#1F2937' }}
-                                >
-                                    {previewData.content || '内容预览...'}
-                                </div>
+                                    style={{
+                                        fontSize: `${20 * (cardWidth / 540)}px`,
+                                        lineHeight: 1.7,
+                                        color: '#333333',
+                                    }}
+                                    dangerouslySetInnerHTML={{ __html: previewData.content || '<p>内容预览...</p>' }}
+                                />
                             </div>
                             <div
-                                className="text-right text-[18px] font-medium mt-auto pt-6"
-                                style={{ color: '#9CA3AF' }}
+                                className="text-right mt-auto"
+                                style={{
+                                    fontSize: `${14 * (cardWidth / 540)}px`,
+                                    fontWeight: 300,
+                                    color: '#9CA3AF',
+                                    paddingTop: `${24 * (cardWidth / 540)}px`,
+                                }}
                             >
                                 {currentPage} / {totalPages}
                             </div>
