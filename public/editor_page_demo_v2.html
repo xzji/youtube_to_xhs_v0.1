@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor Page Demo V2</title>
+    <style>
+        :root {
+            --bg-color: #FAFAFA;
+            --card-bg: #FFFFFF;
+            --border-color: #E5E5E5;
+            --text-primary: #111827;
+            /* Gray 900 */
+            --text-secondary: #6B7280;
+            /* Gray 500 */
+            --text-tertiary: #9CA3AF;
+            /* Gray 400 */
+            --accent-color: #000000;
+            --hover-bg: #F3F4F6;
+            /* Gray 100 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-size: 14px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Icons */
+        .icon {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        /* Header */
+        .header {
+            height: 60px;
+            padding: 0 24px;
+            background-color: var(--bg-color);
+            /* Transparent/Same as bg */
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+            border-bottom: 1px solid transparent;
+            /* Optional: add border if needed */
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-decoration: none;
+            cursor: pointer;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            margin-left: -12px;
+            /* Visual alignment */
+        }
+
+        .back-btn:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+            color: var(--text-primary);
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            flex: 1;
+            padding: 0 24px 24px 24px;
+            gap: 20px;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+        }
+
+        /* Common Card Style */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            /* Softer corners */
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+            /* Subtle lift */
+            transition: box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+            border-color: #D1D5DB;
+            /* Gray 300 */
+        }
+
+        /* Column 1: Source (Video + Transcript) - 25-30% */
+        .col-source {
+            flex: 28;
+            /* ~28% */
+            padding: 0;
+            overflow: hidden;
+            /* Internal scroll */
+        }
+
+        .video-container {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            background: #F9FAFB;
+            /* Slight contrast for video area */
+            border-radius: 12px 12px 0 0;
+        }
+
+        .video-placeholder {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background-color: #1F2937;
+            /* Dark gray/black */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .video-placeholder:hover .play-icon {
+            transform: scale(1.1);
+        }
+
+        .play-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(4px);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease;
+        }
+
+        .play-triangle {
+            width: 0;
+            height: 0;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+            border-left: 14px solid #fff;
+            margin-left: 4px;
+        }
+
+        .transcript-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .transcript-header {
+            padding: 16px;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fff;
+        }
+
+        .transcript-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 0;
+        }
+
+        .transcript-item {
+            padding: 10px 16px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: background-color 0.15s ease;
+        }
+
+        .transcript-item:hover {
+            background-color: var(--hover-bg);
+        }
+
+        .transcript-item.active {
+            background-color: #F3F4F6;
+            border-left-color: var(--accent-color);
+            color: var(--text-primary);
+        }
+
+        .timestamp {
+            display: inline-block;
+            color: var(--text-tertiary);
+            font-family: "SF Mono", "Monaco", "Inconsolata", monospace;
+            font-size: 11px;
+            margin-right: 8px;
+            font-weight: 500;
+        }
+
+        /* Column 2: Editor - 35-40% */
+        .col-editor {
+            flex: 40;
+            /* ~40% */
+            position: relative;
+            overflow: hidden;
+        }
+
+        .editor-toolbar {
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            background: #fff;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .badge {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #F3F4F6;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .editor-scroll-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px 40px;
+        }
+
+        .editor-title-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .editor-title-input {
+            flex: 1;
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.3;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            border: none;
+            outline: none;
+            background: transparent;
+            resize: none;
+            font-family: inherit;
+            overflow: hidden;
+            max-height: 80px;
+            /* Approx 2 lines */
+        }
+
+        .editor-title-count {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            font-weight: 500;
+            padding-top: 8px;
+            flex-shrink: 0;
+            user-select: none;
+        }
+
+        .editor-content p {
+            font-size: 15px;
+            line-height: 1.8;
+            margin-bottom: 20px;
+            color: #374151;
+            /* Gray 700 */
+            text-align: justify;
+        }
+
+        .editor-content p:last-child {
+            margin-bottom: 40px;
+        }
+
+        /* Column 3: Preview - 30-35% */
+        .col-preview {
+            flex: 32;
+            /* ~32% */
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 0 4px;
+        }
+
+        .preview-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-outline {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .btn-outline:hover {
+            background-color: #F9FAFB;
+            border-color: #D1D5DB;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            border: 1px solid var(--accent-color);
+            color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .preview-card-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #F3F4F6;
+            /* Slightly darker bg for preview area context */
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            padding: 24px;
+        }
+
+        .preview-card {
+            background: #fff;
+            width: 100%;
+            max-width: 540px;
+            aspect-ratio: 3/4;
+            padding: 48px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-radius: 2px;
+            /* Sharp corners like paper/image */
+            position: relative;
+        }
+
+        .preview-card-content h2 {
+            font-size: 44px;
+            font-weight: 800;
+            margin-bottom: 40px;
+            line-height: 1.25;
+            color: #000;
+            letter-spacing: -0.03em;
+        }
+
+        .preview-card-content p {
+            font-size: 25px;
+            line-height: 1.7;
+            color: #1F2937;
+            margin-bottom: 16px;
+        }
+
+        .page-number {
+            text-align: right;
+            font-size: 18px;
+            color: var(--text-tertiary);
+            margin-top: auto;
+            font-weight: 500;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 20px;
+            align-items: center;
+        }
+
+        .nav-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+        }
+
+        .page-indicator {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #E5E7EB;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #D1D5DB;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <a href="#" class="back-btn">
+            <svg class="icon" viewBox="0 0 24 24">
+                <path d="M15 18l-6-6 6-6" />
+            </svg>
+            返回首页
+        </a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container">
+
+        <!-- Left Column: Source -->
+        <div class="card col-source">
+            <div class="video-container">
+                <div class="video-placeholder">
+                    <div class="play-icon">
+                        <div class="play-triangle"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="transcript-section">
+                <div class="transcript-header">
+                    <span>视频字幕</span>
+                    <span style="font-size: 12px; color: #9CA3AF; font-weight: normal;">自动滚动</span>
+                </div>
+                <div class="transcript-list">
+                    <div class="transcript-item">
+                        <span class="timestamp">00:00</span>
+                        There's a very famous story about Canva.
+                    </div>
+                    <div class="transcript-item">
+                        <span class="timestamp">00:01</span>
+                        Early on, you pitched over a hundred investors and over a hundred investors
+                    </div>
+                    <div class="transcript-item">
+                        <span class="timestamp">00:03</span>
+                        said no to you.
+                    </div>
+                    <div class="transcript-item active">
+                        <span class="timestamp">00:05</span>
+                        It was really clear in my mind that it was the future and I thought the investors were wrong,
+                        frankly.
+                    </div>
+                    <div class="transcript-item">
+                        <span class="timestamp">00:09</span>
+                        But investors also gave really helpful feedback and feedback often in the form of rejection.
+                    </div>
+                    <div class="transcript-item">
+                        <span class="timestamp">00:14</span>
+                        They would say, "Oh, your market's not big enough." And I would say...
+                    </div>
+                    <div class="transcript-item">
+                        <span class="timestamp">00:17</span>
+                        "It's going to be huge!" And then I would add a new page to my pitch deck.
+                    </div>
+                    <div class="transcript-item">
+                        <span class="timestamp">00:21</span>
+                        Showing how big we believed the market was going to be.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Column: Editor -->
+        <div class="card col-editor">
+            <div class="editor-toolbar">
+                <span class="badge">Markdown</span>
+                <span class="badge">已保存</span>
+            </div>
+            <div class="editor-scroll-area">
+                <div class="editor-content">
+                    <div class="editor-title-container">
+                        <textarea class="editor-title-input" rows="1" placeholder="输入标题..." maxlength="30"
+                            oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'; document.getElementById('char-count').innerText = this.value.length + '/30'">420亿美金背后的5个小故事</textarea>
+                        <span class="editor-title-count" id="char-count">13/30</span>
+                    </div>
+
+                    <p><strong># 故事一： 100次拒绝后的坚持</strong></p>
+
+                    <p>在创业初期，Melanie
+                        Perkins和她的团队面临着一个几乎令人绝望的处境——他们向超过100名投资者pitch了他们的想法，但每一次都被拒绝了。想象一下那种场景：一个年轻的创业者，满怀激情地相信自己的产品将改变世界，却一次又一次地听到"不"。
+                    </p>
+
+                    <p>Mel回忆道："当时我非常清楚这是未来，我认为投资者错了，坦白说。但投资者也提供了非常有用的反馈，通常是以拒绝的形式。"这些拒绝包括"你的市场不够大"，而她会回应"它将会变得巨大"，然后在她的pitch
+                        deck中添加一个新的页面，展示她相信的市场规模有多大。</p>
+
+                    <p>投资者又说"你和某个其他公司一样"，她会说"嘿，现在我在我的pitch deck中有了一个新幻灯片，展示了所有玩家和我们相信将要填补的巨大市场空白"。</p>
+
+                    <p>最令人惊讶的是，这些拒绝最终让他们们的pitch变得更强。"通过大量的拒绝，pitch
+                        deck变得更强大、更完善，"Mel解释说。当一位投资者最终花几个小时理解他们的想法时，Mel能够够将从中学到的一切融入到简短而有力的演示中。</p>
+
+                    <p>这种坚持和适应能力最终帮助他们找到了相信他们愿景的投资者，并筹集到了第一笔资金。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Preview -->
+        <div class="col-preview">
+            <div class="preview-header">
+                <div class="preview-title">效果预览</div>
+                <div class="action-buttons">
+                    <button class="btn btn-outline">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        单页
+                    </button>
+                    <button class="btn btn-primary">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        全部导出
+                    </button>
+                </div>
+            </div>
+
+            <div class="preview-card-container">
+                <div class="preview-card">
+                    <div class="preview-card-content">
+                        <h2>420亿美金背后的<br>5个小故事</h2>
+                        <p><strong>#故事一： 100次拒绝后的坚持</strong></p>
+                        <p>在创业初期，Melanie Perkins和她的团队面临着一个几乎令人绝望的处境——他们向超过100名投资者pitch了他们的想法，但每一次都被拒绝了。</p>
+                        <p>想象一下那种场景：一个年轻的创业者，满怀激情地相信自己的产品将改变世界，却一次又一次地听到"不"。</p>
+                    </div>
+                    <div class="page-number">1 / 12</div>
+                </div>
+
+                <div class="pagination">
+                    <button class="nav-btn">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M15 18l-6-6 6-6" />
+                        </svg>
+                    </button>
+                    <span class="page-indicator">第 1 页</span>
+                    <button class="nav-btn">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Auto-resize title on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const titleInput = document.querySelector('.editor-title-input');
+            if (titleInput) {
+                titleInput.style.height = 'auto';
+                titleInput.style.height = titleInput.scrollHeight + 'px';
+            }
+        });
+    </script>
+</body>
+
+</html>
