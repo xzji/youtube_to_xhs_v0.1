@@ -9,23 +9,25 @@ const PROHIBITED_START_CHARS = [
 
 interface PaginationOptions {
     content: string;
-    cardWidth: number;
+    cardWidth: number;  // 卡片总宽度（包括 padding），用于计算 scale
+    contentWidth: number;  // 内容宽度（已扣除 padding），用于测量容器
     titleHeight: number; // 第一页需要减去标题高度
     contentHeight: number; // 每页可用内容高度
 }
 
 export const paginateContent = async (options: PaginationOptions): Promise<string[]> => {
-    const { content, cardWidth, titleHeight, contentHeight } = options;
+    const { content, cardWidth, contentWidth, titleHeight, contentHeight } = options;
 
     // 1. 创建测量容器
     const container = document.createElement('div');
     container.style.position = 'absolute';
     container.style.visibility = 'hidden';
-    container.style.width = `${cardWidth}px`; // 关键：与卡片宽度一致
+    container.style.width = `${contentWidth}px`; // ✅ 使用内容宽度
     container.style.padding = '0'; // 内容区域无padding，由外层控制
     container.style.margin = '0';
 
-    // 应用基础字体样式 (与 previewCardStyles 保持一致)
+    // ✅ 应用基础字体样式 (与 previewCardStyles 保持一致)
+    // 使用卡片总宽度计算 scale
     const scale = cardWidth / 540;
     container.style.fontSize = `${20 * scale}px`;
     container.style.lineHeight = '1.7';

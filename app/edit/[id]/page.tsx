@@ -116,8 +116,9 @@ export default function EditPage() {
 
             const resizeObserver = new ResizeObserver((entries) => {
                 for (const entry of entries) {
-                    const newWidth = entry.contentRect.width;
-                    console.log('📐 Card width changed:', newWidth, 'px | Browser:', window.innerWidth, 'px');
+                    // ✅ 使用 offsetWidth（包括 padding），而不是 contentRect.width
+                    const newWidth = (entry.target as HTMLElement).offsetWidth;
+                    console.log('📐 Card width changed:', newWidth, 'px (offsetWidth) | Browser:', window.innerWidth, 'px');
                     setCardWidth(newWidth);
                 }
             });
@@ -189,7 +190,8 @@ export default function EditPage() {
 
                 const result = await paginateContent({
                     content: previewData.content,
-                    cardWidth: cardWidth - (padding * 2), // Content width
+                    cardWidth: cardWidth,  // ✅ 传入卡片总宽度（包括 padding）
+                    contentWidth: cardWidth - (padding * 2),  // 内容宽度
                     titleHeight: titleHeight,
                     contentHeight: availableHeight
                 });
