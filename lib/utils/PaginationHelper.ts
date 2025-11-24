@@ -106,12 +106,6 @@ export const paginateContent = async (options: PaginationOptions): Promise<strin
     // 清理
     document.body.removeChild(container);
 
-    // 调试输出
-    console.log('[DEBUG] Pagination complete. Total pages:', pages.length);
-    pages.forEach((page, index) => {
-        console.log(`[DEBUG] Page ${index + 1}:`, page.substring(0, 200));
-    });
-
     return pages;
 };
 
@@ -232,7 +226,6 @@ function splitBlockNode(
     // 确保延续标记在避头规则处理后仍然保留
     if (tagName === 'li' && adjustedResult.remaining) {
         (adjustedResult.remaining as HTMLElement).setAttribute('data-continuation', 'true');
-        console.log('[DEBUG] Set data-continuation on li:', (adjustedResult.remaining as HTMLElement).outerHTML.substring(0, 100));
     }
 
     return {
@@ -383,7 +376,6 @@ function reconstructElement(
     // 如果这是一个被拆分的列表项的延续部分，添加标记
     if (markContinuation && containerTag.toLowerCase() === 'li') {
         container.setAttribute('data-continuation', 'true');
-        console.log('[DEBUG] reconstructElement: Setting data-continuation on', containerTag, 'markContinuation=', markContinuation);
     }
 
     if (charEntries.length === 0) {
@@ -461,7 +453,6 @@ function reconstructElement(
                     elementStack.length === 1) {  // 确保是直接子元素
                     newElement.setAttribute('data-continuation', 'true');
                     firstLiMarked = true;  // 标记已设置，确保只设置一次
-                    console.log('[DEBUG] Set data-continuation on first li child of', containerTag, newElement.outerHTML.substring(0, 80));
                 }
 
                 currentContainer.appendChild(newElement);
