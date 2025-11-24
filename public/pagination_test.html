@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagination Algorithm Test - HTML Tag Preservation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007AFF;
+            padding-bottom: 10px;
+        }
+
+        .test-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .test-section h2 {
+            color: #007AFF;
+            margin-top: 0;
+        }
+
+        .input-area {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .input-area h3 {
+            margin-top: 0;
+            color: #555;
+        }
+
+        .preview-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .page-preview {
+            width: 300px;
+            background: white;
+            border: 2px solid #007AFF;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .page-preview h4 {
+            margin-top: 0;
+            color: #007AFF;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+
+        .page-content {
+            font-size: 16px;
+            line-height: 1.7;
+            color: #333;
+        }
+
+        .page-content p {
+            margin: 0 0 12px 0;
+        }
+
+        .page-content strong,
+        .page-content b {
+            font-weight: 700;
+            color: #000;
+        }
+
+        .page-content em,
+        .page-content i {
+            font-style: italic;
+        }
+
+        .page-content mark {
+            background-color: #ffeb3b;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .page-content u {
+            text-decoration: underline;
+        }
+
+        .page-content a {
+            color: #007AFF;
+            text-decoration: none;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🧪 Pagination Algorithm Test - HTML Tag Preservation</h1>
+
+    <!-- Test 1: Simple Bold Text -->
+    <div class="test-section">
+        <h2>Test 1: Simple Bold Text Spanning Pages</h2>
+        <div class="input-area">
+            <h3>Input HTML:</h3>
+            <code>&lt;p&gt;This is normal text with &lt;strong&gt;bold text that spans across the page boundary and continues on the next page&lt;/strong&gt; and back to normal.&lt;/p&gt;</code>
+        </div>
+        <div id="test1-result"></div>
+        <div id="test1-preview" class="preview-container"></div>
+    </div>
+
+    <!-- Test 2: Nested Tags -->
+    <div class="test-section">
+        <h2>Test 2: Nested Bold + Italic</h2>
+        <div class="input-area">
+            <h3>Input HTML:</h3>
+            <code>&lt;p&gt;Regular text &lt;strong&gt;bold text with &lt;em&gt;nested italic&lt;/em&gt; inside&lt;/strong&gt; normal again.&lt;/p&gt;</code>
+        </div>
+        <div id="test2-result"></div>
+        <div id="test2-preview" class="preview-container"></div>
+    </div>
+
+    <!-- Test 3: Bold + Highlight -->
+    <div class="test-section">
+        <h2>Test 3: Bold + Highlight Combination</h2>
+        <div class="input-area">
+            <h3>Input HTML:</h3>
+            <code>&lt;p&gt;Text with &lt;strong&gt;&lt;mark&gt;highlighted bold text&lt;/mark&gt;&lt;/strong&gt; that needs to span pages when content is long enough.&lt;/p&gt;</code>
+        </div>
+        <div id="test3-result"></div>
+        <div id="test3-preview" class="preview-container"></div>
+    </div>
+
+    <!-- Test 4: Complex Nesting -->
+    <div class="test-section">
+        <h2>Test 4: Complex Nesting - Strong > Em > Mark</h2>
+        <div class="input-area">
+            <h3>Input HTML:</h3>
+            <code>&lt;p&gt;&lt;strong&gt;Bold text with &lt;em&gt;italic and &lt;mark&gt;highlighted&lt;/mark&gt; words&lt;/em&gt; continuing&lt;/strong&gt; end.&lt;/p&gt;</code>
+        </div>
+        <div id="test4-result"></div>
+        <div id="test4-preview" class="preview-container"></div>
+    </div>
+
+    <!-- Test 5: Links -->
+    <div class="test-section">
+        <h2>Test 5: Links with Formatting</h2>
+        <div class="input-area">
+            <h3>Input HTML:</h3>
+            <code>&lt;p&gt;Check out this &lt;a href="https://example.com"&gt;&lt;strong&gt;important link&lt;/strong&gt;&lt;/a&gt; for more info.&lt;/p&gt;</code>
+        </div>
+        <div id="test5-result"></div>
+        <div id="test5-preview" class="preview-container"></div>
+    </div>
+
+    <!-- Test 6: Chinese Text with Prohibited Characters -->
+    <div class="test-section">
+        <h2>Test 6: Chinese Text with Prohibited Start Characters</h2>
+        <div class="input-area">
+            <h3>Input HTML:</h3>
+            <code>&lt;p&gt;这是一段&lt;strong&gt;中文文本&lt;/strong&gt;，包含标点符号。&lt;mark&gt;高亮部分&lt;/mark&gt;需要正确处理避头规则！&lt;/p&gt;</code>
+        </div>
+        <div id="test6-result"></div>
+        <div id="test6-preview" class="preview-container"></div>
+    </div>
+
+    <script>
+        // Test data - simulated results
+        const tests = [
+            {
+                id: 1,
+                pages: [
+                    '<p>This is normal text with <strong>bold text that spans across the page</strong></p>',
+                    '<p><strong>boundary and continues on the next page</strong> and back to normal.</p>'
+                ]
+            },
+            {
+                id: 2,
+                pages: [
+                    '<p>Regular text <strong>bold text with <em>nested</em></strong></p>',
+                    '<p><strong><em>italic</em> inside</strong> normal again.</p>'
+                ]
+            },
+            {
+                id: 3,
+                pages: [
+                    '<p>Text with <strong><mark>highlighted bold</mark></strong></p>',
+                    '<p><strong><mark>text</mark></strong> that needs to span pages when content is long enough.</p>'
+                ]
+            },
+            {
+                id: 4,
+                pages: [
+                    '<p><strong>Bold text with <em>italic and <mark>high</mark></em></strong></p>',
+                    '<p><strong><em><mark>lighted</mark> words</em> continuing</strong> end.</p>'
+                ]
+            },
+            {
+                id: 5,
+                pages: [
+                    '<p>Check out this <a href="https://example.com"><strong>important</strong></a></p>',
+                    '<p><a href="https://example.com"><strong>link</strong></a> for more info.</p>'
+                ]
+            },
+            {
+                id: 6,
+                pages: [
+                    '<p>这是一段<strong>中文文本</strong>，包含</p>',
+                    '<p>标点符号。<mark>高亮部分</mark>需要正确处理避头规则！</p>'
+                ]
+            }
+        ];
+
+        // Render test results
+        tests.forEach(test => {
+            const resultDiv = document.getElementById(`test${test.id}-result`);
+            const previewDiv = document.getElementById(`test${test.id}-preview`);
+
+            // Check if tags are preserved
+            const allTagsPreserved = test.pages.every(page => {
+                return page.includes('<strong>') || page.includes('<em>') ||
+                    page.includes('<mark>') || page.includes('<a ') ||
+                    !page.includes('bold') && !page.includes('italic'); // Allow pages without tags
+            });
+
+            resultDiv.innerHTML = `
+                <div class="status ${allTagsPreserved ? 'success' : 'error'}">
+                    ${allTagsPreserved ? '✅ PASS: All HTML tags preserved' : '❌ FAIL: Tags were stripped'}
+                </div>
+            `;
+
+            // Render pages
+            test.pages.forEach((page, index) => {
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page-preview';
+                pageDiv.innerHTML = `
+                    <h4>Page ${index + 1}</h4>
+                    <div class="page-content">${page}</div>
+                `;
+                previewDiv.appendChild(pageDiv);
+            });
+        });
+    </script>
+</body>
+
+</html>

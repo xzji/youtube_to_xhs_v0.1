@@ -48,6 +48,7 @@ const theme = {
         code: 'bg-gray-100 px-1 py-0.5 rounded font-mono text-sm',
     },
     code: 'bg-gray-100 p-4 rounded-lg font-mono text-sm my-2 block',
+    mark: 'bg-yellow-200 px-1 rounded font-semibold',  // 高亮标记样式
 };
 
 // HTML 到编辑器的初始化插件
