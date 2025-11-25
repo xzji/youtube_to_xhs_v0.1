@@ -157,7 +157,7 @@ export function getPreviewStyles(cardWidth: number) {
             fontSize: `${14 * scale}px`,
             fontWeight: 300,
             color: '#9CA3AF',
-            paddingTop: `${24 * scale}px`,
+            paddingTop: `${3 * scale}px`,
         },
     };
 }

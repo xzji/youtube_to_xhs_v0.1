@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -178,9 +180,9 @@ export default function EditPage() {
 
             try {
                 const scale = cardWidth / 540;
-                const totalHeight = cardWidth * (4 / 3);
+                const totalHeight = cardWidth * (5 / 3);
                 const padding = 48 * scale;
-                const footerHeight = 50 * scale; // Approximate footer height
+                const footerHeight = 30 * scale; // Adjusted for smaller page number padding (3px)
                 const availableHeight = totalHeight - (padding * 2) - footerHeight;
 
                 // Title height calculation (approximate based on font size and margin)
@@ -239,7 +241,7 @@ export default function EditPage() {
             clone.style.cssText = `
                 background-color: #ffffff !important;
                 width: ${exportWidth}px !important;
-                aspect-ratio: 3/4 !important;
+                aspect-ratio: 3/5 !important;
                 padding: ${48 * scale}px !important;
                 display: flex !important;
                 flex-direction: column !important;
@@ -397,7 +399,7 @@ export default function EditPage() {
                     font-size: ${14 * scale}px !important;
                     font-weight: 300 !important;
                     color: #9CA3AF !important;
-                    padding-top: ${24 * scale}px !important;
+                    padding-top: ${3 * scale}px !important;
                     margin-top: auto !important;
                     background: none !important;
                     border: none !important;
@@ -453,9 +455,9 @@ export default function EditPage() {
                 useCORS: true,
                 allowTaint: true,
                 width: exportWidth,
-                height: exportWidth * (4 / 3), // 3:4 aspect ratio
+                height: exportWidth * (5 / 3), // 3:5 aspect ratio
                 windowWidth: exportWidth,
-                windowHeight: exportWidth * (4 / 3),
+                windowHeight: exportWidth * (5 / 3),
             });
 
             // Clean up
@@ -615,7 +617,8 @@ export default function EditPage() {
                             <button
                                 onClick={() => handleExportSingle()}
                                 title="下载当前页面"
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-white border border-[#E5E5E5] text-gray-900 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm cursor-pointer"
+                                style={{ cursor: 'pointer' }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-white border border-[#E5E5E5] text-gray-900 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
                             >
                                 <Download className="w-3.5 h-3.5" />
                                 单页
@@ -623,7 +626,8 @@ export default function EditPage() {
                             <button
                                 onClick={handleExportAll}
                                 title="下载全部页面"
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-black border border-black text-white rounded-lg hover:opacity-90 transition-all shadow-sm cursor-pointer"
+                                style={{ cursor: 'pointer' }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-black border border-black text-white rounded-lg hover:opacity-90 transition-all shadow-sm"
                             >
                                 <Download className="w-3.5 h-3.5" />
                                 全部导出
@@ -632,83 +636,84 @@ export default function EditPage() {
                     </div>
 
                     {/* Preview Card Container */}
-                    <div className="flex-1 bg-[#F3F4F6] border border-[#E5E5E5] rounded-xl p-6 flex flex-col items-center justify-center overflow-hidden">
-                        {/* Phone Card */}
-                        <div
-                            ref={previewCardRef}
-                            className="bg-white w-full max-w-[540px] aspect-[3/4] p-12 flex flex-col justify-between shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] rounded-[2px] overflow-hidden relative"
-                            style={{
-                                backgroundColor: '#ffffff',
-                                padding: `${48 * (cardWidth / 540)}px`,
-                            }}
-                        >
-                            <div className="flex-1 overflow-hidden preview-content">
-                                {currentPage === 1 && (
-                                    <h1
-                                        className={detectTextLanguage(previewData.title || '')}
-                                        style={{
-                                            fontSize: `${38 * (cardWidth / 540)}px`,
-                                            fontWeight: 700,
-                                            lineHeight: 1.25,
-                                            letterSpacing: '-0.03em',
-                                            marginBottom: `${40 * (cardWidth / 540)}px`,
-                                            fontFamily: getH1FontFamily(detectTextLanguage(previewData.title || '')),
-                                            color: '#000000',
-                                        }}
-                                    >
-                                        {previewData.title || '标题预览'}
-                                    </h1>
-                                )}
-                                <div
-                                    style={{
-                                        fontSize: `${20 * (cardWidth / 540)}px`,
-                                        lineHeight: 1.7,
-                                        color: '#333333',
-                                    }}
-                                    dangerouslySetInnerHTML={{
-                                        __html: (pages.length > 0 ? pages[currentPage - 1] : previewData.content) || '<p>内容预览...</p>'
-                                    }}
-                                />
-                            </div>
+                    <div className="flex-1 bg-[#F3F4F6] border border-[#E5E5E5] rounded-xl p-6 flex flex-col items-center justify-center overflow-visible">
+                        {/* Card with Navigation Arrows */}
+                        <div className="relative group">
+                            {/* Phone Card */}
                             <div
-                                className="text-right mt-auto"
+                                ref={previewCardRef}
+                                className="bg-white w-full max-w-[540px] flex flex-col justify-between shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] rounded-[2px] overflow-hidden relative"
                                 style={{
-                                    fontSize: `${14 * (cardWidth / 540)}px`,
-                                    fontWeight: 300,
-                                    color: '#9CA3AF',
-                                    paddingTop: `${24 * (cardWidth / 540)}px`,
+                                    backgroundColor: '#ffffff',
+                                    padding: `${48 * (cardWidth / 540)}px`,
+                                    aspectRatio: '3 / 5',
                                 }}
                             >
-                                {currentPage} / {totalPages}
+                                <div className="flex-1 overflow-hidden preview-content">
+                                    {currentPage === 1 && (
+                                        <h1
+                                            className={detectTextLanguage(previewData.title || '')}
+                                            style={{
+                                                fontSize: `${38 * (cardWidth / 540)}px`,
+                                                fontWeight: 700,
+                                                lineHeight: 1.25,
+                                                letterSpacing: '-0.03em',
+                                                marginBottom: `${40 * (cardWidth / 540)}px`,
+                                                fontFamily: getH1FontFamily(detectTextLanguage(previewData.title || '')),
+                                                color: '#000000',
+                                            }}
+                                        >
+                                            {previewData.title || '标题预览'}
+                                        </h1>
+                                    )}
+                                    <div
+                                        style={{
+                                            fontSize: `${20 * (cardWidth / 540)}px`,
+                                            lineHeight: 1.7,
+                                            color: '#333333',
+                                        }}
+                                        dangerouslySetInnerHTML={{
+                                            __html: (pages.length > 0 ? pages[currentPage - 1] : previewData.content) || '<p>内容预览...</p>'
+                                        }}
+                                    />
+                                </div>
+                                <div
+                                    className="text-right mt-auto"
+                                    style={{
+                                        fontSize: `${14 * (cardWidth / 540)}px`,
+                                        fontWeight: 300,
+                                        color: '#9CA3AF',
+                                        paddingTop: `${3 * (cardWidth / 540)}px`,
+                                    }}
+                                >
+                                    {currentPage} / {totalPages}
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Pagination */}
-                        <div className="flex items-center gap-4 mt-5">
+                            {/* Left Arrow - Show on hover */}
                             <button
                                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                 disabled={currentPage === 1}
-                                title="上一页"
-                                className={`w-9 h-9 rounded-full bg-white border border-[#E5E5E5] flex items-center justify-center transition-all ${currentPage === 1
-                                    ? 'text-gray-300 cursor-not-allowed opacity-50'
-                                    : 'text-gray-500 hover:text-gray-900 hover:border-gray-400 cursor-pointer'
+                                className={`absolute left-[10px] top-1/2 -translate-y-1/2 rounded-full bg-white/90 backdrop-blur-sm shadow-lg flex items-center justify-center transition-all duration-300 ${currentPage === 1
+                                    ? 'opacity-0 cursor-not-allowed'
+                                    : 'opacity-0 group-hover:opacity-100 cursor-pointer hover:bg-white hover:scale-110'
                                     }`}
+                                style={{ border: '1px solid rgba(0,0,0,0.1)', width: '30px', height: '30px' }}
                             >
-                                <ChevronLeft className="w-4 h-4" />
+                                <ChevronLeft className="w-4 h-4 text-gray-700" />
                             </button>
-                            <span className="text-[13px] font-medium text-gray-500">
-                                第 {currentPage} 页
-                            </span>
+
+                            {/* Right Arrow - Show on hover */}
                             <button
                                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                                 disabled={currentPage === totalPages}
-                                title="下一页"
-                                className={`w-9 h-9 rounded-full bg-white border border-[#E5E5E5] flex items-center justify-center transition-all ${currentPage === totalPages
-                                    ? 'text-gray-300 cursor-not-allowed opacity-50'
-                                    : 'text-gray-500 hover:text-gray-900 hover:border-gray-400 cursor-pointer'
+                                className={`absolute right-[10px] top-1/2 -translate-y-1/2 rounded-full bg-white/90 backdrop-blur-sm shadow-lg flex items-center justify-center transition-all duration-300 ${currentPage === totalPages
+                                    ? 'opacity-0 cursor-not-allowed'
+                                    : 'opacity-0 group-hover:opacity-100 cursor-pointer hover:bg-white hover:scale-110'
                                     }`}
+                                style={{ border: '1px solid rgba(0,0,0,0.1)', width: '30px', height: '30px' }}
                             >
-                                <ChevronRight className="w-4 h-4" />
+                                <ChevronRight className="w-4 h-4 text-gray-700" />
                             </button>
                         </div>
                     </div>

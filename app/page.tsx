@@ -90,6 +90,12 @@ export default function Home() {
 
       const data = await response.json();
 
+      if (data.transcriptError) {
+        setError(`无法获取字幕: ${data.transcriptError}。请尝试其他视频或检查链接。`);
+        setLoading(false);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(data.error || 'Something went wrong');
       }
@@ -120,22 +126,39 @@ export default function Home() {
           你想写点什么
         </h1>
 
-        <div className="bg-white border border-[#E5E5E5] rounded-xl p-6 md:p-8 transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] focus-within:border-black focus-within:shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
-          <form onSubmit={handleSubmit}>
+        <div className="bg-white border border-[#E5E5E5] rounded-xl pt-6 pr-6 pb-3 pl-6 md:pt-8 md:pr-8 md:pb-4 md:pl-8 transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] focus-within:border-black focus-within:shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+          <form onSubmit={handleSubmit} noValidate>
             <input
-              type="url"
+              type="text"
               placeholder="输入启发你的 youtube 链接"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="w-full border-none text-base outline-none py-2.5 mb-10 placeholder:text-[#999] text-black bg-transparent"
+              value={url || ''}
+              onChange={(e) => {
+                setUrl(e.target.value || '');
+                if (error) setError(''); // Clear error when user modifies input
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // Clear the input instead of browser default behavior
+                  setUrl('');
+                  e.currentTarget.blur();
+                }
+              }}
+              className="w-full border-none text-base outline-none py-2.5 placeholder:text-[#999] text-black bg-transparent"
               autoFocus
             />
+
+            {/* Fixed height container for error message - prevents layout shift */}
+            <div className="h-5 text-sm text-red-500 font-medium">
+              {error}
+            </div>
 
             <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-2">
               {/* Left: Model Selector */}
               <div className="flex items-center">
                 <Select value={model} onValueChange={setModel}>
-                  <SelectTrigger className="h-auto p-0 border-none shadow-none focus:ring-0 bg-transparent gap-1.5 text-sm text-[#333] hover:text-black data-[state=open]:text-black w-auto">
+                  <SelectTrigger className="h-auto p-0 !border-none !shadow-none focus:ring-0 focus-visible:!ring-0 focus-visible:!border-none bg-transparent gap-1.5 text-sm text-[#333] hover:text-black data-[state=open]:text-black w-auto cursor-pointer">
                     <SelectValue placeholder="选择模型" />
                   </SelectTrigger>
                   <SelectContent>
@@ -152,7 +175,7 @@ export default function Home() {
               {/* Right: Style Selector + Button */}
               <div className="flex items-center gap-6">
                 <Select value={style} onValueChange={setStyle}>
-                  <SelectTrigger className="h-auto p-0 border-none shadow-none focus:ring-0 bg-transparent gap-1.5 text-sm text-[#333] hover:text-black data-[state=open]:text-black w-auto">
+                  <SelectTrigger className="h-auto p-0 !border-none !shadow-none focus:ring-0 focus-visible:!ring-0 focus-visible:!border-none bg-transparent gap-1.5 text-sm text-[#333] hover:text-black data-[state=open]:text-black w-auto cursor-pointer">
                     <SelectValue placeholder="选择方式" />
                   </SelectTrigger>
                   <SelectContent>
@@ -164,7 +187,8 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={loading || !url}
-                  className="bg-[#333] text-white border-none py-2.5 px-6 rounded-md text-sm font-medium cursor-pointer transition-colors hover:bg-black disabled:bg-[#ccc] disabled:cursor-not-allowed flex items-center"
+                  style={{ cursor: loading || !url ? 'not-allowed' : 'pointer' }}
+                  className="bg-[#333] text-white border-none py-[6px] px-6 rounded-md text-sm font-medium transition-colors hover:bg-black disabled:bg-[#ccc] flex items-center"
                 >
                   {loading ? (
                     <>
@@ -178,12 +202,6 @@ export default function Home() {
               </div>
             </div>
           </form>
-
-          {error && (
-            <div className="mt-4 text-sm text-red-500 font-medium">
-              ⚠️ {error}
-            </div>
-          )}
         </div>
       </div>
 
