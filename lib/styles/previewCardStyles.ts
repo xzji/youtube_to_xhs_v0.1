@@ -109,11 +109,19 @@ export function getPreviewStyles(cardWidth: number) {
         // 高亮标记
         mark: {
             backgroundColor: '#fff59d',
+            // background: '#fff59d', // Removed shorthand to avoid conflicts
             color: '#000000',
             fontWeight: 'bold',
-            borderBottom: '2px solid #ff9800',
             borderRadius: `${4 * scale}px`,
             padding: `${2 * scale}px ${6 * scale}px`,
+            textDecoration: 'none',
+            textDecorationLine: 'none',
+            border: 'none',
+            borderBottom: 'none',
+            boxShadow: 'none',
+            display: 'inline',
+            WebkitBoxDecorationBreak: 'clone',
+            boxDecorationBreak: 'clone',
         },
 
         // 无序列表
@@ -160,4 +168,74 @@ export function getPreviewStyles(cardWidth: number) {
             paddingTop: `${3 * scale}px`,
         },
     };
+}
+/**
+ * 应用特定元素的样式（使用 centralized styles）
+ */
+export function applyElementStyles(el: HTMLElement, tag: string, scale: number) {
+    // Reset basic styles
+    el.style.margin = '0';
+    el.style.padding = '0';
+    el.removeAttribute('class'); // Remove class to ensure no CSS interference
+
+    const effectiveCardWidth = scale * 540;
+    const styles = getPreviewStyles(effectiveCardWidth);
+
+    if (tag === 'p') {
+        Object.assign(el.style, styles.p);
+    } else if (tag === 'h1') {
+        Object.assign(el.style, styles.h1);
+        el.style.display = 'block';
+    } else if (tag === 'h2') {
+        Object.assign(el.style, styles.h2);
+    } else if (tag === 'h3') {
+        Object.assign(el.style, styles.h3);
+    } else if (tag === 'ul') {
+        Object.assign(el.style, styles.ul);
+    } else if (tag === 'ol') {
+        Object.assign(el.style, styles.ol);
+    } else if (tag === 'li') {
+        Object.assign(el.style, styles.li);
+    } else if (tag === 'a') {
+        Object.assign(el.style, styles.a);
+    } else if (tag === 'code') {
+        Object.assign(el.style, styles.code);
+    } else if (tag === 'mark') {
+        Object.assign(el.style, styles.mark);
+    } else if (tag === 'blockquote') {
+        Object.assign(el.style, styles.blockquote);
+    }
+}
+
+/**
+ * 处理 HTML 字符串，为所有元素应用内联样式
+ * @param html - 原始 HTML 字符串
+ * @param cardWidth - 卡片宽度
+ * @returns 带有内联样式的 HTML 字符串
+ */
+export function processHtmlWithStyles(html: string, cardWidth: number): string {
+    if (!html) return '';
+
+    // Only works in browser environment
+    if (typeof window === 'undefined') return html;
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const scale = cardWidth / 540;
+
+    // Recursive function to apply styles
+    const processNode = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement;
+            const tagName = el.tagName.toLowerCase();
+
+            applyElementStyles(el, tagName, scale);
+
+            // Recursively process children
+            Array.from(el.childNodes).forEach(processNode);
+        }
+    };
+
+    Array.from(doc.body.childNodes).forEach(processNode);
+    return doc.body.innerHTML;
 }

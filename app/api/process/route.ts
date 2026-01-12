@@ -12,7 +12,7 @@ const transcriptProvider: TranscriptProvider = youtubeEdgeProvider;
 
 export async function POST(req: NextRequest) {
     try {
-        const { url, model, style } = await req.json();
+        const { url, model, style, transcript: clientTranscript, metadata: clientMetadata } = await req.json();
 
         if (!url || !transcriptProvider.validateUrl(url)) {
             return NextResponse.json({ error: 'Invalid YouTube URL' }, { status: 400 });
@@ -23,16 +23,43 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Could not extract Video ID' }, { status: 400 });
         }
 
-        // Parallelize fetching metadata and transcript
-        let transcriptError = null;
-        const [metadata, transcriptItems] = await Promise.all([
-            transcriptProvider.getMetadata(videoId),
-            transcriptProvider.getTranscript(videoId).catch(err => {
-                console.warn('Transcript fetch failed:', err);
-                transcriptError = err.message || 'Unknown error';
-                return [];
-            })
-        ]);
+        let metadata: any;
+        let transcriptItems: any[];
+
+        // 如果客户端已提供字幕和元数据，直接使用（推荐方式）
+        if (clientTranscript && clientMetadata) {
+            console.log('[API] Using client-provided transcript and metadata');
+            transcriptItems = clientTranscript;
+            metadata = clientMetadata;
+        } else {
+            // Fallback: 服务端获取（向后兼容，但通过顺序请求规避 IP 封禁）
+            console.log('[API] Falling back to server-side transcript fetching (Sequential Mode)');
+
+            try {
+                // 1. 获取元数据
+                console.log('[API] Fetching metadata...');
+                metadata = await transcriptProvider.getMetadata(videoId);
+
+                // 2. 避免并发，人为延迟 100ms
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // 3. 获取字幕
+                console.log('[API] Fetching transcript...');
+                const transcriptResult = await transcriptProvider.getTranscript(videoId);
+                transcriptItems = transcriptResult;
+
+            } catch (err: any) {
+                console.warn('Transcript/Metadata fetch failed:', err);
+                const transcriptError = err.message || 'Unknown error';
+
+                return NextResponse.json({
+                    error: `无法获取字幕: ${transcriptError}`,
+                    transcriptError
+                }, { status: 400 });
+            }
+
+            // Error handled in catch block above
+        }
 
         // Extract frames (disabled for now - requires yt-dlp and FFmpeg)
         // Use YouTube thumbnail as frames instead
@@ -62,7 +89,6 @@ export async function POST(req: NextRequest) {
             frames,
             generated: generatedContent,
             transcript: transcriptItems,
-            transcriptError
         });
 
     } catch (error: any) {

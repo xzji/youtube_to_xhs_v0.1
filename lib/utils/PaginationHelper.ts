@@ -1,4 +1,4 @@
-import { getPreviewStyles, detectTextLanguage, getH1FontFamily } from '../styles/previewCardStyles';
+import { getPreviewStyles, detectTextLanguage, getH1FontFamily, applyElementStyles } from '../styles/previewCardStyles';
 
 // 避头标点：不能出现在行首（即不能作为一页的第一个字符）
 const PROHIBITED_START_CHARS = [
@@ -581,36 +581,4 @@ function moveFirstCharacter(
 /**
  * 应用特定元素的样式（必须与 previewCardStyles.ts 保持一致）
  */
-function applyElementStyles(el: HTMLElement, tag: string, scale: number) {
-    el.style.margin = '0';
-    el.style.padding = '0';
 
-    if (tag === 'p') {
-        el.style.fontSize = `${20 * scale}px`;
-        el.style.marginBottom = `${12 * scale}px`;
-    } else if (tag === 'h1') {
-        el.style.fontSize = `${40 * scale}px`;
-        el.style.fontWeight = '700';
-        el.style.fontFamily = 'Times New Roman, serif';
-        el.style.marginBottom = `${40 * scale}px`;
-    } else if (tag === 'h2') {
-        el.style.fontSize = `${32 * scale}px`;
-        el.style.fontWeight = '700';
-        el.style.fontFamily = 'Times New Roman, serif';
-        el.style.marginBottom = `${16 * scale}px`;
-        el.style.marginTop = `${24 * scale}px`;
-    } else if (tag === 'h3') {
-        el.style.fontSize = `${26 * scale}px`;
-        el.style.fontWeight = '700';
-        el.style.fontFamily = 'Times New Roman, serif';
-        el.style.marginBottom = `${12 * scale}px`;
-        el.style.marginTop = `${20 * scale}px`;
-    } else if (tag === 'ul' || tag === 'ol') {
-        el.style.fontSize = `${22 * scale}px`;
-        el.style.paddingLeft = `${20 * scale}px`;
-        el.style.marginBottom = `${12 * scale}px`;
-    } else if (tag === 'li') {
-        el.style.fontSize = `${22 * scale}px`;
-        el.style.marginBottom = `${4 * scale}px`;
-    }
-}

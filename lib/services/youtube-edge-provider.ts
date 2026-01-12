@@ -122,7 +122,12 @@ export class YouTubeEdgeProvider implements TranscriptProvider {
     async getMetadata(videoId: string): Promise<VideoMetadata> {
         try {
             const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-            const response = await fetch(oembedUrl);
+            const response = await fetch(oembedUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                    'Cookie': 'CONSENT=YES+cb.20210328-17-p0.en+FX+419'
+                }
+            });
 
             if (!response.ok) {
                 throw new Error('Failed to fetch video metadata');
@@ -155,10 +160,12 @@ export class YouTubeEdgeProvider implements TranscriptProvider {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
                     'Accept-Language': lang || 'en-US,en;q=0.9',
+                    // 'Cookie': 'CONSENT=YES+cb.20210328-17-p0.en+FX+419'
                 },
             });
 
             if (!videoPageResponse.ok) {
+                console.error(`[YouTubeEdgeProvider] Video page fetch failed: ${videoPageResponse.status}`);
                 return null;
             }
 
@@ -174,6 +181,7 @@ export class YouTubeEdgeProvider implements TranscriptProvider {
                 html.match(/INNERTUBE_API_KEY\\":\\"([^\\"]+)\\"/);
 
             if (!apiKeyMatch) {
+                console.error('[YouTubeEdgeProvider] Could not extract INNERTUBE_API_KEY');
                 return null;
             }
 
@@ -184,8 +192,8 @@ export class YouTubeEdgeProvider implements TranscriptProvider {
             const playerBody = {
                 context: {
                     client: {
-                        clientName: 'ANDROID',
-                        clientVersion: '20.10.38'
+                        clientName: 'IOS',
+                        clientVersion: '19.29.1'
                     }
                 },
                 videoId: videoId
@@ -202,6 +210,9 @@ export class YouTubeEdgeProvider implements TranscriptProvider {
             });
 
             if (!playerRes.ok) {
+                console.error(`[YouTubeEdgeProvider] Player API failed: ${playerRes.status}`);
+                const errorText = await playerRes.text();
+                console.error('[YouTubeEdgeProvider] Player API error:', errorText);
                 return null;
             }
 
@@ -213,6 +224,9 @@ export class YouTubeEdgeProvider implements TranscriptProvider {
             const tracks = tracklist?.captionTracks;
 
             if (!Array.isArray(tracks) || tracks.length === 0) {
+                console.warn('[YouTubeEdgeProvider] No caption tracks found in Player response');
+                // debug: log the structure of playerJson
+                console.log(JSON.stringify(playerJson, null, 2));
                 return null;
             }
 
@@ -222,6 +236,7 @@ export class YouTubeEdgeProvider implements TranscriptProvider {
                 : tracks[0];
 
             if (!selectedTrack) {
+                console.warn(`[YouTubeEdgeProvider] No track found for language ${lang}`);
                 return null;
             }
 
@@ -247,6 +262,7 @@ export class YouTubeEdgeProvider implements TranscriptProvider {
 
         } catch (error) {
             // 静默失败，返回 null 以便尝试下一个语言
+            console.error(`[YouTubeEdgeProvider] Error fetching ${lang}:`, error);
             return null;
         }
     }

@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Download, Play } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LexicalEditor from '@/lib/editor/LexicalEditor';
-import { getPreviewStyles, detectTextLanguage, getH1FontFamily } from '@/lib/styles/previewCardStyles';
+import { getPreviewStyles, detectTextLanguage, getH1FontFamily, processHtmlWithStyles } from '@/lib/styles/previewCardStyles';
 import '@/lib/styles/previewCard.css';
 
 interface ProjectData {
@@ -182,18 +182,42 @@ export default function EditPage() {
                 const scale = cardWidth / 540;
                 const totalHeight = cardWidth * (5 / 3);
                 const padding = 48 * scale;
-                const footerHeight = 30 * scale; // Adjusted for smaller page number padding (3px)
-                const availableHeight = totalHeight - (padding * 2) - footerHeight;
+                const footerHeight = 30 * scale;
+                const safetyBuffer = 20 * scale; // Buffer to prevent truncation
+                const availableHeight = totalHeight - (padding * 2) - footerHeight - safetyBuffer;
 
-                // Title height calculation (approximate based on font size and margin)
-                // H1: 38px * scale, LineHeight 1.25, MarginBottom 40px * scale
-                // Height ≈ (38 * 1.25 + 40) * scale
-                const titleHeight = (38 * 1.25 + 40) * scale;
+                // Title height calculation (Dynamic measurement)
+                const measureH1 = document.createElement('h1');
+                const titleLang = detectTextLanguage(previewData.title || '');
+                // Apply same styles as preview/export
+                Object.assign(measureH1.style, {
+                    visibility: 'hidden',
+                    position: 'absolute',
+                    width: `${cardWidth - (padding * 2)}px`, // Content width
+                    fontSize: `${38 * scale}px`,
+                    fontWeight: '700',
+                    lineHeight: '1.25',
+                    letterSpacing: '-0.03em',
+                    marginBottom: `${40 * scale}px`,
+                    fontFamily: getH1FontFamily(titleLang),
+                    whiteSpace: 'pre-wrap',
+                    wordWrap: 'break-word',
+                    margin: '0',
+                    padding: '0'
+                });
+                measureH1.textContent = previewData.title || '标题预览';
+                document.body.appendChild(measureH1);
+
+                // Height = offsetHeight + marginBottom
+                const measuredTitleHeight = measureH1.offsetHeight + (40 * scale);
+                document.body.removeChild(measureH1);
+
+                const titleHeight = measuredTitleHeight;
 
                 const result = await paginateContent({
                     content: previewData.content,
-                    cardWidth: cardWidth,  // ✅ 传入卡片总宽度（包括 padding）
-                    contentWidth: cardWidth - (padding * 2),  // 内容宽度
+                    cardWidth: cardWidth,
+                    contentWidth: cardWidth - (padding * 2),
                     titleHeight: titleHeight,
                     contentHeight: availableHeight
                 });
@@ -230,6 +254,9 @@ export default function EditPage() {
             const exportWidth = 1080;
             const scale = exportWidth / 540;
 
+            // Get standardized styles
+            const styles = getPreviewStyles(exportWidth);
+
             // Clone the card element
             const originalCard = previewCardRef.current;
             const clone = originalCard.cloneNode(true) as HTMLElement;
@@ -237,7 +264,7 @@ export default function EditPage() {
             // 移除所有class属性
             clone.removeAttribute('class');
 
-            // Apply export styles
+            // Apply export styles to container
             clone.style.cssText = `
                 background-color: #ffffff !important;
                 width: ${exportWidth}px !important;
@@ -265,21 +292,16 @@ export default function EditPage() {
                 // Only show title on first page
                 if (targetPage === 1) {
                     const titleLang = detectTextLanguage(previewData.title || '');
-                    (title as HTMLElement).style.cssText = `
-                        font-size: ${38 * scale}px !important;
-                        font-weight: 700 !important;
-                        line-height: 1.25 !important;
-                        letter-spacing: -0.03em !important;
-                        margin-bottom: ${40 * scale}px !important;
-                        font-family: ${getH1FontFamily(titleLang)} !important;
-                        color: #000000 !important;
-                        word-wrap: break-word !important;
-                        background: none !important;
-                        border: none !important;
-                        padding: 0 !important;
-                        margin-top: 0 !important;
-                        display: block !important;
-                    `;
+                    Object.assign(title.style, {
+                        ...styles.h1,
+                        fontFamily: getH1FontFamily(titleLang),
+                        color: '#000000',
+                        display: 'block',
+                        background: 'none',
+                        border: 'none',
+                        padding: '0',
+                        marginTop: '0'
+                    });
                 } else {
                     // Hide title on other pages
                     (title as HTMLElement).style.display = 'none';
@@ -298,16 +320,12 @@ export default function EditPage() {
                 `;
             }
 
-            // Style content div - robust selector
-            // 1. Try to find the div that follows h1
-            // 2. If no h1 or no sibling, try to find the first div inside contentContainer that is NOT h1
+            // Style content div
             let contentDiv: HTMLElement | null = null;
-
             const titleElement = clone.querySelector('h1');
             if (titleElement && titleElement.nextElementSibling) {
                 contentDiv = titleElement.nextElementSibling as HTMLElement;
             } else if (contentContainer) {
-                // Find first div that is not h1
                 const divs = contentContainer.querySelectorAll('div');
                 if (divs.length > 0) {
                     contentDiv = divs[0] as HTMLElement;
@@ -317,9 +335,9 @@ export default function EditPage() {
             if (contentDiv && contentDiv.tagName === 'DIV') {
                 contentDiv.removeAttribute('class');
                 contentDiv.style.cssText = `
-                    font-size: ${20 * scale}px !important;
-                    line-height: 1.7 !important;
-                    color: #333333 !important;
+                    font-size: ${styles.p.fontSize} !important;
+                    line-height: ${styles.p.lineHeight} !important;
+                    color: ${styles.p.color} !important;
                     background: none !important;
                     padding: 0 !important;
                     margin: 0 !important;
@@ -332,59 +350,39 @@ export default function EditPage() {
                     const htmlEl = el as HTMLElement;
 
                     htmlEl.removeAttribute('class');
-                    htmlEl.style.background = 'none';
+
+                    // Special handling for mark tags: preserve background
+                    if (tag !== 'mark') {
+                        htmlEl.style.background = 'none';
+                    }
+
                     htmlEl.style.border = 'none';
                     htmlEl.style.margin = '0';
                     htmlEl.style.padding = '0';
 
-                    if (tag === 'h2') {
-                        htmlEl.style.fontSize = `${32 * scale}px`;
-                        htmlEl.style.fontWeight = '700';
-                        htmlEl.style.color = '#000000';
-                        htmlEl.style.fontFamily = 'Times New Roman, serif';
-                        htmlEl.style.marginBottom = `${16 * scale}px`;
-                        htmlEl.style.marginTop = `${24 * scale}px`;
+                    // Apply styles from centralized config
+                    if (tag === 'p') {
+                        Object.assign(htmlEl.style, styles.p);
+                    } else if (tag === 'h2') {
+                        Object.assign(htmlEl.style, styles.h2);
                     } else if (tag === 'h3') {
-                        htmlEl.style.fontSize = `${26 * scale}px`;
-                        htmlEl.style.fontWeight = '700';
-                        htmlEl.style.color = '#000000';
-                        htmlEl.style.fontFamily = 'Times New Roman, serif';
-                        htmlEl.style.marginBottom = `${12 * scale}px`;
-                        htmlEl.style.marginTop = `${20 * scale}px`;
-                    } else if (tag === 'p') {
-                        htmlEl.style.fontSize = `${20 * scale}px`;
-                        htmlEl.style.color = '#333333';
-                        htmlEl.style.marginBottom = `${12 * scale}px`;
-                    } else if (tag === 'ul' || tag === 'ol') {
-                        htmlEl.style.fontSize = `${22 * scale}px`;
-                        htmlEl.style.paddingLeft = `${20 * scale}px`;
-                        htmlEl.style.color = '#333333';
-                        htmlEl.style.marginBottom = `${12 * scale}px`;
+                        Object.assign(htmlEl.style, styles.h3);
+                    } else if (tag === 'ul') {
+                        Object.assign(htmlEl.style, styles.ul);
+                    } else if (tag === 'ol') {
+                        Object.assign(htmlEl.style, styles.ol);
                     } else if (tag === 'li') {
-                        htmlEl.style.color = '#333333';
-                        htmlEl.style.marginBottom = `${4 * scale}px`;
+                        Object.assign(htmlEl.style, styles.li);
                     } else if (tag === 'a') {
-                        htmlEl.style.color = '#4a9eff';
-                        htmlEl.style.textDecoration = 'none';
+                        Object.assign(htmlEl.style, styles.a);
                     } else if (tag === 'code') {
-                        htmlEl.style.fontFamily = 'JetBrains Mono, monospace';
-                        htmlEl.style.backgroundColor = '#f5f5f5';
-                        htmlEl.style.padding = `${4 * scale}px ${8 * scale}px`;
-                        htmlEl.style.borderRadius = '4px';
-                        htmlEl.style.color = '#333333';
+                        Object.assign(htmlEl.style, styles.code);
                     } else if (tag === 'mark') {
-                        htmlEl.style.backgroundColor = '#fff59d';
-                        htmlEl.style.borderBottom = '2px solid #ff9800';
-                        htmlEl.style.borderRadius = '4px';
-                        htmlEl.style.padding = '2px 6px';
-                        htmlEl.style.fontWeight = 'bold';
-                        htmlEl.style.color = '#000000';
+                        Object.assign(htmlEl.style, styles.mark);
+                        // Explicitly enforce background color for mark
+                        htmlEl.style.backgroundColor = styles.mark.backgroundColor || '#fff59d';
                     } else if (tag === 'blockquote') {
-                        htmlEl.style.borderLeft = `4px solid #4a9eff`;
-                        htmlEl.style.paddingLeft = `${16 * scale}px`;
-                        htmlEl.style.color = '#666666';
-                        htmlEl.style.fontStyle = 'italic';
-                        htmlEl.style.marginBottom = `${12 * scale}px`;
+                        Object.assign(htmlEl.style, styles.blockquote);
                     }
                 });
             }
@@ -394,16 +392,14 @@ export default function EditPage() {
             const pageNum = allDivs[allDivs.length - 1];
             if (pageNum) {
                 pageNum.removeAttribute('class');
-                (pageNum as HTMLElement).style.cssText = `
-                    text-align: right !important;
-                    font-size: ${14 * scale}px !important;
-                    font-weight: 300 !important;
-                    color: #9CA3AF !important;
-                    padding-top: ${3 * scale}px !important;
-                    margin-top: auto !important;
-                    background: none !important;
-                    border: none !important;
-                `;
+                Object.assign(pageNum.style, {
+                    ...styles.pageNumber,
+                    textAlign: 'right',
+                    marginTop: 'auto',
+                    background: 'none',
+                    border: 'none',
+                    display: 'block' // Ensure visibility
+                });
             }
 
             // --- Iframe Isolation Strategy ---
@@ -668,12 +664,15 @@ export default function EditPage() {
                                     )}
                                     <div
                                         style={{
-                                            fontSize: `${20 * (cardWidth / 540)}px`,
-                                            lineHeight: 1.7,
-                                            color: '#333333',
+                                            // fontSize: `${20 * (cardWidth / 540)}px`, // Removed: Styles are now inline in the HTML
+                                            // lineHeight: 1.7,
+                                            // color: '#333333',
                                         }}
                                         dangerouslySetInnerHTML={{
-                                            __html: (pages.length > 0 ? pages[currentPage - 1] : previewData.content) || '<p>内容预览...</p>'
+                                            __html: processHtmlWithStyles(
+                                                (pages.length > 0 ? pages[currentPage - 1] : previewData.content) || '<p>内容预览...</p>',
+                                                cardWidth
+                                            )
                                         }}
                                     />
                                 </div>

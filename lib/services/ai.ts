@@ -1,3 +1,5 @@
+import { STYLE_PROMPTS, SYSTEM_PROMPT_TEMPLATE } from '@/lib/constants/prompts';
+
 export class AIService {
     static async generateContent(
         videoTitle: string,
@@ -17,29 +19,9 @@ export class AIService {
         }
 
         // Build prompt based on style
-        const stylePrompt = style === '故事模式'
-            ? '请用生动的故事叙述方式，将视频内容改写成适合小红书的图文内容。注重情节和细节描写，让读者身临其境。'
-            : '请用观点分析的方式，将视频内容改写成适合小红书的图文内容。突出核心观点和论证逻辑，条理清晰。';
+        const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS['故事模式'];
 
-        const systemPrompt = `你是一位擅长将YouTube视频内容改编成小红书图文的专业写作助手。你的任务是：
-1. 分析视频字幕内容
-2. 提炼核心信息和亮点
-3. 按照指定风格创作小红书笔记
-4. 生成吸引人的标题和相关标签
-
-${stylePrompt}
-
-输出格式要求：
-- 标题：简洁有力，15-30字，吸引点击
-- 正文：结构清晰，使用emoji适当点缀，总字数500-800字
-- 标签：3-5个相关话题标签，格式为 #标签名
-
-请严格按照JSON格式返回：
-{
-  "title": "你的标题",
-  "content": "正文内容",
-  "tags": ["#标签1", "#标签2", "#标签3"]
-}`;
+        const systemPrompt = SYSTEM_PROMPT_TEMPLATE.replace('{{STYLE_PROMPT}}', stylePrompt);
 
         const userPrompt = `视频标题：${videoTitle}\n\n视频字幕：\n${transcript}`;
 
@@ -77,12 +59,18 @@ ${stylePrompt}
 
             // Parse JSON response
             try {
-                // Try to extract JSON from markdown code blocks if present
-                const jsonMatch = aiResponse.match(/```json\n([\s\S]*?)\n```/) ||
-                    aiResponse.match(/```\n([\s\S]*?)\n```/) ||
-                    [null, aiResponse];
+                // Try to find JSON object boundaries
+                const firstOpen = aiResponse.indexOf('{');
+                const lastClose = aiResponse.lastIndexOf('}');
 
-                const jsonStr = jsonMatch[1] || aiResponse;
+                let jsonStr;
+                if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+                    jsonStr = aiResponse.substring(firstOpen, lastClose + 1);
+                } else {
+                    jsonStr = aiResponse;
+                }
+
+                // Attempt to parse
                 const parsed = JSON.parse(jsonStr.trim());
 
                 return {

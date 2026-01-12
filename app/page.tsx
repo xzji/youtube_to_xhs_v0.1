@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, ChevronDown } from 'lucide-react';
+import { youtubeClientProvider } from '@/lib/services/youtube-client-provider';
+import type { TranscriptItem, VideoMetadata } from '@/lib/services/transcript-provider';
 
 export default function Home() {
   const [url, setUrl] = useState('');
   const [model, setModel] = useState('tngtech/deepseek-r1t2-chimera:free');
   const [style, setStyle] = useState('故事模式');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState('');
 
   // API Key Modal State
@@ -74,8 +77,44 @@ export default function Home() {
 
     setLoading(true);
     setError('');
+    setLoadingMessage('正在验证链接...');
 
     try {
+      // 1. 验证 URL 并提取视频 ID
+      if (!youtubeClientProvider.validateUrl(url)) {
+        throw new Error('请输入有效的 YouTube 链接');
+      }
+
+      const videoId = youtubeClientProvider.extractVideoId(url);
+      if (!videoId) {
+        throw new Error('无法从 URL 中提取视频 ID');
+      }
+
+      // 2. 在客户端获取字幕和元数据 - 使用用户真实 IP
+      setLoadingMessage('正在获取字幕...');
+      let transcript: TranscriptItem[];
+      let metadata: VideoMetadata;
+
+      try {
+        [transcript, metadata] = await Promise.all([
+          youtubeClientProvider.getTranscript(videoId),
+          youtubeClientProvider.getMetadata(videoId)
+        ]);
+      } catch (transcriptError: any) {
+        // Fallback to server-side fetching
+        console.warn('Client-side transcript fetch failed, falling back to server:', transcriptError);
+        // Clear variables to ensure server-side fetch is triggered
+        transcript = undefined as any;
+        metadata = undefined as any;
+        // Don't return error, let it proceed to API call
+      }
+
+      if (transcript) {
+        console.log(`Successfully fetched ${transcript.length} transcript items`);
+      }
+
+      // 3. 发送到后端进行 AI 内容生成
+      setLoadingMessage('正在生成内容...');
       const response = await fetch('/api/process', {
         method: 'POST',
         headers: {
@@ -84,30 +123,29 @@ export default function Home() {
         body: JSON.stringify({
           url,
           model,
-          style
+          style,
+          // 传递客户端获取的字幕和元数据
+          transcript,
+          metadata
         }),
       });
 
       const data = await response.json();
 
-      if (data.transcriptError) {
-        setError(`无法获取字幕: ${data.transcriptError}。请尝试其他视频或检查链接。`);
-        setLoading(false);
-        return;
-      }
-
       if (!response.ok) {
-        throw new Error(data.error || 'Something went wrong');
+        throw new Error(data.error || '处理失败，请重试');
       }
 
-      const videoId = data.metadata.id;
+      // 4. 保存到本地存储并跳转
       localStorage.setItem(`project_${videoId}`, JSON.stringify(data));
-
       router.push(`/edit/${videoId}`);
+
     } catch (err: any) {
-      setError(err.message);
+      console.error('Error:', err);
+      setError(err.message || '发生未知错误，请重试');
     } finally {
       setLoading(false);
+      setLoadingMessage('');
     }
   };
 
@@ -193,7 +231,7 @@ export default function Home() {
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      生成中
+                      {loadingMessage || '处理中...'}
                     </>
                   ) : (
                     '去写点'
