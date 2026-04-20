@@ -15,6 +15,7 @@ import path from 'path';
 const execFileAsync = promisify(execFile);
 const YT_DLP_DOWNLOAD_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
 const YT_DLP_CACHE_PATH = process.env.YT_DLP_PATH || '/tmp/yt-dlp';
+const YOUTUBE_COOKIES_CACHE_PATH = process.env.YOUTUBE_COOKIES_CACHE_PATH || '/tmp/youtube-cookies.txt';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,40 +28,42 @@ app.use(cors({
 
 app.use(express.json());
 
-async function fileExists(filePath: string): Promise<boolean> {
+async function fileExists(filePath: string, mode: number = fs.constants.X_OK): Promise<boolean> {
     try {
-        await fs.promises.access(filePath, fs.constants.X_OK);
+        await fs.promises.access(filePath, mode);
         return true;
     } catch {
         return false;
     }
 }
 
-async function resolveSystemYtDlp(): Promise<string | null> {
-    const candidates = [
-        process.env.YT_DLP_PATH,
-        '/usr/local/bin/yt-dlp',
-        '/usr/bin/yt-dlp',
-        '/opt/homebrew/bin/yt-dlp',
-    ].filter(Boolean) as string[];
-
-    for (const candidate of candidates) {
+async function resolveBinary(binaryName: string, candidates: string[]): Promise<string | null> {
+    for (const candidate of candidates.filter(Boolean)) {
         if (await fileExists(candidate)) {
             return candidate;
         }
     }
 
     try {
-        const { stdout } = await execFileAsync('which', ['yt-dlp']);
+        const { stdout } = await execFileAsync('which', [binaryName]);
         const resolved = stdout.trim();
         if (resolved && await fileExists(resolved)) {
             return resolved;
         }
     } catch {
-        // Ignore and fall back to downloading a local binary.
+        // Ignore resolution failures and let callers fall back gracefully.
     }
 
     return null;
+}
+
+async function resolveSystemYtDlp(): Promise<string | null> {
+    return resolveBinary('yt-dlp', [
+        process.env.YT_DLP_PATH ?? '',
+        '/usr/local/bin/yt-dlp',
+        '/usr/bin/yt-dlp',
+        '/opt/homebrew/bin/yt-dlp',
+    ]);
 }
 
 async function ensureYtDlp(): Promise<string> {
@@ -87,6 +90,53 @@ async function ensureYtDlp(): Promise<string> {
     return YT_DLP_CACHE_PATH;
 }
 
+async function resolveNodeBinary(): Promise<string | null> {
+    return resolveBinary('node', [
+        process.env.NODE_BINARY_PATH ?? '',
+        '/usr/local/bin/node',
+        '/usr/bin/node',
+        '/opt/homebrew/bin/node',
+    ]);
+}
+
+async function ensureYoutubeCookiesFile(): Promise<string | null> {
+    const cookieFilePath = process.env.YOUTUBE_COOKIES_PATH?.trim();
+    if (cookieFilePath && await fileExists(cookieFilePath, fs.constants.R_OK)) {
+        return cookieFilePath;
+    }
+
+    const cookieContent = process.env.YOUTUBE_COOKIES?.trim();
+    const cookieContentBase64 = process.env.YOUTUBE_COOKIES_BASE64?.trim();
+
+    if (!cookieContent && !cookieContentBase64) {
+        return null;
+    }
+
+    const resolvedContent = cookieContent
+        ? cookieContent.replace(/\\n/g, '\n')
+        : Buffer.from(cookieContentBase64!, 'base64').toString('utf-8');
+
+    await fs.promises.writeFile(YOUTUBE_COOKIES_CACHE_PATH, resolvedContent, { mode: 0o600 });
+    return YOUTUBE_COOKIES_CACHE_PATH;
+}
+
+async function buildYtDlpArgs(commandArgs: string[]): Promise<string[]> {
+    const finalArgs: string[] = [];
+    const cookiesPath = await ensureYoutubeCookiesFile();
+    const nodeBinaryPath = await resolveNodeBinary();
+
+    if (nodeBinaryPath) {
+        finalArgs.push('--js-runtimes', `node:${nodeBinaryPath}`);
+    }
+
+    if (cookiesPath) {
+        finalArgs.push('--cookies', cookiesPath);
+    }
+
+    finalArgs.push('--no-playlist', ...commandArgs);
+    return finalArgs;
+}
+
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -103,7 +153,10 @@ app.get('/api/metadata', async (req: Request, res: Response) => {
     try {
         const ytDlpPath = await ensureYtDlp();
         const url = `https://www.youtube.com/watch?v=${videoId}`;
-        const { stdout } = await execFileAsync(ytDlpPath, ['--dump-json', '--skip-download', url]);
+        const { stdout } = await execFileAsync(
+            ytDlpPath,
+            await buildYtDlpArgs(['--dump-json', '--skip-download', url])
+        );
         const metadata = JSON.parse(stdout);
 
         res.json({
@@ -145,7 +198,7 @@ app.get('/api/transcript', async (req: Request, res: Response) => {
 
         await execFileAsync(
             ytDlpPath,
-            ['--skip-download', '--write-auto-sub', '--sub-lang', language, '--sub-format', 'vtt', '-o', outputTemplate, url],
+            await buildYtDlpArgs(['--skip-download', '--write-auto-sub', '--sub-lang', language, '--sub-format', 'vtt', '-o', outputTemplate, url]),
             { timeout: 30000 }
         );
 
@@ -157,7 +210,7 @@ app.get('/api/transcript', async (req: Request, res: Response) => {
             // Try with original subtitles if auto-sub failed
             await execFileAsync(
                 ytDlpPath,
-                ['--skip-download', '--write-sub', '--sub-lang', language, '--sub-format', 'vtt', '-o', outputTemplate, url],
+                await buildYtDlpArgs(['--skip-download', '--write-sub', '--sub-lang', language, '--sub-format', 'vtt', '-o', outputTemplate, url]),
                 { timeout: 30000 }
             );
 
