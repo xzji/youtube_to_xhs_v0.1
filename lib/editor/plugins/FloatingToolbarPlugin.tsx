@@ -125,13 +125,93 @@ export default function FloatingToolbarPlugin() {
         editor.update(() => {
             const selection = $getSelection();
             if ($isRangeSelection(selection)) {
-                $patchStyleText(selection, {
-                    'background-color': '#fff59d',
-                    'border-bottom': '2px solid #ff9800',
-                    'border-radius': '4px',
-                    'padding': '2px 6px',
-                    'font-weight': 'bold',
+                // simple check: if any part of selection has the background color, remove it
+                // A robust implementation might check all nodes, but for now specific style check is fine
+                // Lexical's $patchStyleText merges styles. To remove, we set values to null.
+
+                // HACK: Check if the *first* node in selection has the style to determine toggle state
+                // This is a common simplification.
+                // Or better: try to remove first, if no change (or checking current style), then add.
+
+                // Let's use `hasFormat` equivalent for styles? Lexical doesn't have `hasStyle`.
+                // We need to check style of the nodes.
+
+                // We'll trust the user intention: if they click highlight, and it looks highlighted, they want to remove.
+                // For this simple implementation, let's check a known style property on the selection anchor.
+
+                // Actually, $patchStyleText is smart. But to *remove*, we need to pass null.
+                // We need to know IF we should remove.
+                // Let's just implement a robust toggle based on current state.
+
+                // Since we don't track `isHighlight` state in this component yet (only bold/italic),
+                // let's add logic to detect it or just blindly apply/remove based on a heuristic?
+                // No, better to detect.
+
+                // Let's rely on the fact that if we apply 'background-color': null, it removes it.
+                // But we need to know the current state.
+                // Let's try to read the style from the selection.
+
+                /* 
+                   Lexical doesn't provide an easy "getStyle" for RangeSelection exposed directly here easily without traversing.
+                   However, we can check the nodes. 
+                */
+
+                // Improved logic:
+                const currentStyle = selection.style; // RangeSelection has a style string? No.
+                // It's on the nodes.
+
+                // Let's use a simpler approach used by other plugins:
+                // Check if the selection has the specific background color using a helper or DOM check?
+                // The floating toolbar is checking bold/italic using `selection.hasFormat`.
+                // For styles, it's harder.
+
+                // Let's implement a rudimentary toggle:
+                // We will try to apply "remove" styles. If we are properly highlighting, we track it.
+
+                // Better plan: Add `isHighlight` to the state tracking (lines 35-40) so the button shows active state,
+                // and use that state to decide whether to add or remove.
+
+                // But first, let's update the `updateToolbar` to detect highlight.
+                // We can't easily detect "background-color: #fff59d" with `selection.hasFormat`.
+                // We need to parse `selection.getStyle()`. Wait, does RangeSelection have `getStyle`? Not directly public in all versions.
+
+                // Let's try `selection.hasStyle` if available? No.
+
+                // Alternative: We can check the DOM node of the anchor.
+                // const anchorNode = selection.anchor.getNode();
+                // const style = anchorNode.getStyle(); 
+
+                // Let's proceed with:
+                // 1. Get nodes. 
+                // 2. Check if any has 'background-color: #fff59d'.
+                // 3. If so, remove. Else add.
+
+                const nodes = selection.getNodes();
+                const isHighlighted = nodes.some(node => {
+                    if ('getStyle' in node && typeof node.getStyle === 'function') {
+                        const style = node.getStyle() as string;
+                        return style.includes('background-color: #fff59d') || style.includes('background-color: rgb(255, 245, 157)');
+                    }
+                    return false;
                 });
+
+                if (isHighlighted) {
+                    $patchStyleText(selection, {
+                        'background-color': null,
+                        'border-bottom': null,
+                        'border-radius': null,
+                        'padding': null,
+                        'font-weight': null,
+                    });
+                } else {
+                    $patchStyleText(selection, {
+                        'background-color': '#fff59d',
+                        'border-bottom': '2px solid #ff9800',
+                        'border-radius': '4px',
+                        'padding': '2px 6px',
+                        'font-weight': 'bold',
+                    });
+                }
             }
         });
     };

@@ -1,10 +1,11 @@
 import { STYLE_PROMPTS, SYSTEM_PROMPT_TEMPLATE } from '@/lib/constants/prompts';
+import { DEFAULT_MODEL } from '@/lib/constants/models';
 
 export class AIService {
     static async generateContent(
         videoTitle: string,
         transcript: string,
-        model: string = 'tngtech/deepseek-r1t2-chimera:free',
+        model: string = DEFAULT_MODEL,
         style: string = '故事模式'
     ): Promise<{ title: string; content: string; tags: string[] }> {
         const apiKey = process.env.OPENROUTER_API_KEY;
@@ -53,24 +54,31 @@ export class AIService {
             const data = await response.json();
             const aiResponse = data.choices?.[0]?.message?.content;
 
-            if (!aiResponse) {
-                throw new Error('No response from AI model');
+            if (!aiResponse || aiResponse.trim().length === 0) {
+                console.error('[AIService] Empty AI response. Full data:', JSON.stringify(data));
+                throw new Error(`AI 模型 (${model}) 返回了空响应，请尝试更换其他免费模型（如 Qwen 或 Llama）。`);
             }
 
             // Parse JSON response
             try {
-                // Try to find JSON object boundaries
-                const firstOpen = aiResponse.indexOf('{');
-                const lastClose = aiResponse.lastIndexOf('}');
+                let jsonStr = aiResponse;
 
-                let jsonStr;
-                if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
-                    jsonStr = aiResponse.substring(firstOpen, lastClose + 1);
-                } else {
-                    jsonStr = aiResponse;
+                // 1. Remove markdown code blocks (```json ... ```)
+                const markdownMatch = aiResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                if (markdownMatch) {
+                    jsonStr = markdownMatch[1];
                 }
 
-                // Attempt to parse
+                // 2. Find outermost JSON object
+                const firstOpen = jsonStr.indexOf('{');
+                const lastClose = jsonStr.lastIndexOf('}');
+
+                if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+                    jsonStr = jsonStr.substring(firstOpen, lastClose + 1);
+                }
+
+                // 3. Attempt to parse
+                console.log('[AIService] Parsing JSON string:', jsonStr.substring(0, 100) + '...');
                 const parsed = JSON.parse(jsonStr.trim());
 
                 return {
@@ -79,8 +87,22 @@ export class AIService {
                     tags: Array.isArray(parsed.tags) ? parsed.tags : ['#YouTube', '#AI生成']
                 };
             } catch (parseError) {
-                // If JSON parsing fails, return raw content
-                console.warn('Failed to parse AI response as JSON, using raw content');
+                console.error('[AIService] JSON Parse Error:', parseError);
+                console.log('[AIService] Raw AI Response:', aiResponse);
+
+                // If JSON parsing fails, try to use regex to extract fields as fallback
+                const titleMatch = aiResponse.match(/"title"\s*:\s*"([^"]*)"/);
+                const contentMatch = aiResponse.match(/"content"\s*:\s*"([^"]*)"/); // This might fail for multiline content
+
+                if (titleMatch || contentMatch) {
+                    return {
+                        title: titleMatch ? titleMatch[1] : videoTitle,
+                        content: aiResponse, // It's safer to return full response if content regex fails
+                        tags: ['#YouTube', '#AI生成', '#小红书']
+                    };
+                }
+
+                // Absolute fallback
                 return {
                     title: videoTitle,
                     content: aiResponse,
@@ -90,11 +112,11 @@ export class AIService {
 
         } catch (error: any) {
             console.error('AI generation error:', error);
-            // Fallback to mock data on error
+            // Fallback to mock data with error details
             return {
                 title: `${videoTitle}`,
-                content: `生成内容时出现错误。\n\n视频摘要：\n${transcript.substring(0, 300)}...`,
-                tags: ['#YouTube', '#视频摘要']
+                content: `生成内容时出现错误：${error.message || '未知错误'}\n\n建议：请在首页尝试选择其他免费模型（如 Qwen 或 GLM）。\n\n视频摘要：\n${transcript.substring(0, 300)}...`,
+                tags: ['#YouTube', '#视频摘要', '#错误提示']
             };
         }
     }

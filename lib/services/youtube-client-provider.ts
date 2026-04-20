@@ -8,7 +8,7 @@
 import type { TranscriptProvider, TranscriptItem, VideoMetadata } from './transcript-provider';
 
 // Railway 字幕服务 API 地址（部署后需要更新）
-const SUBTITLE_SERVICE_URL = process.env.NEXT_PUBLIC_SUBTITLE_API_URL || 'http://localhost:3001';
+const SUBTITLE_SERVICE_URL = process.env.NEXT_PUBLIC_SUBTITLE_API_URL || 'https://youtubetoxhsv01-production.up.railway.app';
 
 // 内存缓存
 interface CacheEntry {

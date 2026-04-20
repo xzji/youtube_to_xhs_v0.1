@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { youtubeEdgeProvider } from '@/lib/services/youtube-edge-provider';
+import { youtubeClientProvider } from '@/lib/services/youtube-client-provider';
 import type { TranscriptProvider } from '@/lib/services/transcript-provider';
 import { MediaService } from '@/lib/services/media';
 import { AIService } from '@/lib/services/ai';
@@ -8,7 +8,7 @@ import { AIService } from '@/lib/services/ai';
 export const runtime = 'edge';
 
 // 使用 Provider 模式 - 易于替换不同的字幕服务
-const transcriptProvider: TranscriptProvider = youtubeEdgeProvider;
+const transcriptProvider: TranscriptProvider = youtubeClientProvider;
 
 export async function POST(req: NextRequest) {
     try {

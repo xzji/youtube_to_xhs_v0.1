@@ -6,10 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, ChevronDown } from 'lucide-react';
 import { youtubeClientProvider } from '@/lib/services/youtube-client-provider';
 import type { TranscriptItem, VideoMetadata } from '@/lib/services/transcript-provider';
+import { AI_MODELS, DEFAULT_MODEL } from '@/lib/constants/models';
 
 export default function Home() {
   const [url, setUrl] = useState('');
-  const [model, setModel] = useState('tngtech/deepseek-r1t2-chimera:free');
+  const [model, setModel] = useState(DEFAULT_MODEL);
+  console.log('Current Model:', model);
+  console.log('Default Model:', DEFAULT_MODEL);
+  console.log('Available Models:', AI_MODELS);
   const [style, setStyle] = useState('故事模式');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
@@ -200,12 +204,11 @@ export default function Home() {
                     <SelectValue placeholder="选择模型" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="tngtech/deepseek-r1t2-chimera:free">DeepSeek R1T2 (Free)</SelectItem>
-                    <SelectItem value="kwaipilot/kat-coder-pro:free">Kat Coder Pro (Free)</SelectItem>
-                    <SelectItem value="z-ai/glm-4.5-air:free">GLM-4.5 Air (Free)</SelectItem>
-                    <SelectItem value="tngtech/deepseek-r1t-chimera:free">DeepSeek R1T (Free)</SelectItem>
-                    <SelectItem value="qwen/qwen3-coder:free">Qwen 3 Coder (Free)</SelectItem>
-                    <SelectItem value="nvidia/nemotron-nano-12b-v2-vl:free">Nemotron Nano 12B (Free)</SelectItem>
+                    {AI_MODELS.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name} {m.isFree ? '(Free)' : ''}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

@@ -7,12 +7,14 @@
 
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+const YT_DLP_DOWNLOAD_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+const YT_DLP_CACHE_PATH = process.env.YT_DLP_PATH || '/tmp/yt-dlp';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,6 +26,66 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+async function fileExists(filePath: string): Promise<boolean> {
+    try {
+        await fs.promises.access(filePath, fs.constants.X_OK);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function resolveSystemYtDlp(): Promise<string | null> {
+    const candidates = [
+        process.env.YT_DLP_PATH,
+        '/usr/local/bin/yt-dlp',
+        '/usr/bin/yt-dlp',
+        '/opt/homebrew/bin/yt-dlp',
+    ].filter(Boolean) as string[];
+
+    for (const candidate of candidates) {
+        if (await fileExists(candidate)) {
+            return candidate;
+        }
+    }
+
+    try {
+        const { stdout } = await execFileAsync('which', ['yt-dlp']);
+        const resolved = stdout.trim();
+        if (resolved && await fileExists(resolved)) {
+            return resolved;
+        }
+    } catch {
+        // Ignore and fall back to downloading a local binary.
+    }
+
+    return null;
+}
+
+async function ensureYtDlp(): Promise<string> {
+    const systemPath = await resolveSystemYtDlp();
+    if (systemPath) {
+        return systemPath;
+    }
+
+    if (await fileExists(YT_DLP_CACHE_PATH)) {
+        return YT_DLP_CACHE_PATH;
+    }
+
+    console.log(`[Subtitle Service] yt-dlp not found, downloading binary to ${YT_DLP_CACHE_PATH}`);
+    const response = await fetch(YT_DLP_DOWNLOAD_URL);
+
+    if (!response.ok) {
+        throw new Error(`Failed to download yt-dlp: HTTP ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    await fs.promises.writeFile(YT_DLP_CACHE_PATH, Buffer.from(arrayBuffer));
+    await fs.promises.chmod(YT_DLP_CACHE_PATH, 0o755);
+
+    return YT_DLP_CACHE_PATH;
+}
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -39,8 +101,9 @@ app.get('/api/metadata', async (req: Request, res: Response) => {
     }
 
     try {
+        const ytDlpPath = await ensureYtDlp();
         const url = `https://www.youtube.com/watch?v=${videoId}`;
-        const { stdout } = await execAsync(`yt-dlp --dump-json --skip-download "${url}"`);
+        const { stdout } = await execFileAsync(ytDlpPath, ['--dump-json', '--skip-download', url]);
         const metadata = JSON.parse(stdout);
 
         res.json({
@@ -64,10 +127,13 @@ app.get('/api/transcript', async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Missing videoId parameter' });
     }
 
-    const language = (lang as string) || 'en';
+    // If language is 'en', use regex 'en.*' to match en-US, en-GB, etc.
+    const requestedLang = (lang as string) || 'en';
+    const language = requestedLang === 'en' ? 'en.*' : requestedLang;
     const tempDir = `/tmp/subs_${videoId}_${Date.now()}`;
 
     try {
+        const ytDlpPath = await ensureYtDlp();
         // Create temp directory
         fs.mkdirSync(tempDir, { recursive: true });
 
@@ -77,8 +143,9 @@ app.get('/api/transcript', async (req: Request, res: Response) => {
         // Fetch subtitles using yt-dlp
         console.log(`[Subtitle Service] Fetching subtitles for ${videoId} (${language})`);
 
-        await execAsync(
-            `yt-dlp --skip-download --write-auto-sub --sub-lang ${language} --sub-format vtt -o "${outputTemplate}" "${url}"`,
+        await execFileAsync(
+            ytDlpPath,
+            ['--skip-download', '--write-auto-sub', '--sub-lang', language, '--sub-format', 'vtt', '-o', outputTemplate, url],
             { timeout: 30000 }
         );
 
@@ -88,8 +155,9 @@ app.get('/api/transcript', async (req: Request, res: Response) => {
 
         if (!subtitleFile) {
             // Try with original subtitles if auto-sub failed
-            await execAsync(
-                `yt-dlp --skip-download --write-sub --sub-lang ${language} --sub-format vtt -o "${outputTemplate}" "${url}"`,
+            await execFileAsync(
+                ytDlpPath,
+                ['--skip-download', '--write-sub', '--sub-lang', language, '--sub-format', 'vtt', '-o', outputTemplate, url],
                 { timeout: 30000 }
             );
 

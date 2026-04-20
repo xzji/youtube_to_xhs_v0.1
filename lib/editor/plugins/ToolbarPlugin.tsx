@@ -13,6 +13,7 @@ import {
     REDO_COMMAND,
 } from 'lexical';
 import { $setBlocksType } from '@lexical/selection';
+import { $getSelectionStyleValueForProperty, $patchStyleText } from '@lexical/selection';
 import { $createHeadingNode, $createQuoteNode, HeadingTagType } from '@lexical/rich-text';
 import { INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND } from '@lexical/list';
 import { $createCodeNode } from '@lexical/code';
@@ -33,13 +34,14 @@ import {
 } from 'lucide-react';
 import { mergeRegister } from '@lexical/utils';
 import { TOGGLE_LINK_COMMAND } from '@lexical/link';
-import { $patchStyleText } from '@lexical/selection';
+
 
 export default function ToolbarPlugin() {
     const [editor] = useLexicalComposerContext();
     const [isBold, setIsBold] = useState(false);
     const [isItalic, setIsItalic] = useState(false);
     const [isUnderline, setIsUnderline] = useState(false);
+    const [isHighlight, setIsHighlight] = useState(false);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
 
@@ -49,6 +51,9 @@ export default function ToolbarPlugin() {
             setIsBold(selection.hasFormat('bold'));
             setIsItalic(selection.hasFormat('italic'));
             setIsUnderline(selection.hasFormat('underline'));
+            // Check for highlight style (background-color)
+            const backgroundColor = $getSelectionStyleValueForProperty(selection, 'background-color', '#fff59d');
+            setIsHighlight(!!backgroundColor);
         }
     }, []);
 
@@ -200,7 +205,7 @@ export default function ToolbarPlugin() {
             </button>
             <button
                 onClick={toggleHighlight}
-                className="p-2 hover:bg-gray-200 rounded"
+                className={`p-2 hover:bg-gray-200 rounded ${isHighlight ? 'bg-gray-300' : ''}`}
                 title="高亮"
             >
                 <Highlighter className="w-4 h-4" />
