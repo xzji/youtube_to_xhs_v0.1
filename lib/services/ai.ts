@@ -1,5 +1,126 @@
 import { STYLE_PROMPTS, SYSTEM_PROMPT_TEMPLATE } from '@/lib/constants/prompts';
 import { DEFAULT_MODEL } from '@/lib/constants/models';
+import { formatGeneratedContent } from '@/lib/utils/content-emphasis';
+
+const MAX_PROMPT_TRANSCRIPT_CHARS = 12000;
+const MIN_SEGMENT_LENGTH = 18;
+
+function normalizeSegment(text: string): string {
+    return text
+        .replace(/\[[^\]]*\]/g, ' ')
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function splitTranscriptIntoSegments(transcript: string): string[] {
+    return transcript
+        .replace(/\r\n/g, '\n')
+        .split(/(?<=[。！？!?\.])\s+|\n+/)
+        .map(normalizeSegment)
+        .filter((segment) => segment.length >= MIN_SEGMENT_LENGTH);
+}
+
+function dedupeSegments(segments: string[]): string[] {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+
+    for (const segment of segments) {
+        const fingerprint = segment.toLowerCase();
+        const previous = unique[unique.length - 1]?.toLowerCase() ?? '';
+
+        if (seen.has(fingerprint)) {
+            continue;
+        }
+
+        if (previous && (previous.includes(fingerprint) || fingerprint.includes(previous))) {
+            unique[unique.length - 1] = segment.length > previous.length ? segment : unique[unique.length - 1];
+            seen.add(fingerprint);
+            continue;
+        }
+
+        seen.add(fingerprint);
+        unique.push(segment);
+    }
+
+    return unique;
+}
+
+function selectRepresentativeSegments(segments: string[], maxChars: number): string[] {
+    if (segments.length === 0) {
+        return [];
+    }
+
+    const selected: string[] = [];
+    const selectedIndexes = new Set<number>();
+    const targetCount = Math.min(36, segments.length);
+    const priorityIndexes = new Set<number>([
+        0,
+        1,
+        segments.length - 2,
+        segments.length - 1,
+    ].filter((index) => index >= 0 && index < segments.length));
+
+    for (let i = 0; i < targetCount; i += 1) {
+        const index = Math.floor((i * (segments.length - 1)) / Math.max(targetCount - 1, 1));
+        priorityIndexes.add(index);
+    }
+
+    for (const index of Array.from(priorityIndexes).sort((a, b) => a - b)) {
+        if (!selectedIndexes.has(index)) {
+            selectedIndexes.add(index);
+            selected.push(segments[index]);
+        }
+    }
+
+    let joined = selected.join('\n');
+    if (joined.length <= maxChars) {
+        return selected;
+    }
+
+    const trimmed: string[] = [];
+    let total = 0;
+
+    for (const segment of selected) {
+        const nextLength = total === 0 ? segment.length : total + 1 + segment.length;
+        if (nextLength > maxChars) {
+            break;
+        }
+        trimmed.push(segment);
+        total = nextLength;
+    }
+
+    return trimmed;
+}
+
+function prepareTranscriptForPrompt(transcript: string): string {
+    const normalized = normalizeSegment(transcript);
+    if (normalized.length <= MAX_PROMPT_TRANSCRIPT_CHARS) {
+        return normalized;
+    }
+
+    const segments = dedupeSegments(splitTranscriptIntoSegments(transcript));
+    const selectedSegments = selectRepresentativeSegments(segments, MAX_PROMPT_TRANSCRIPT_CHARS);
+    const condensed = selectedSegments.join('\n');
+
+    if (condensed.length > 0) {
+        return condensed;
+    }
+
+    return normalized.slice(0, MAX_PROMPT_TRANSCRIPT_CHARS);
+}
+
+function buildContentPayload(
+    title: string,
+    content: string,
+    tags: string[]
+): { title: string; content: string; tags: string[] } {
+    return {
+        title,
+        content: formatGeneratedContent(content),
+        tags,
+    };
+}
 
 export class AIService {
     static async generateContent(
@@ -12,19 +133,21 @@ export class AIService {
 
         if (!apiKey) {
             console.warn('OPENROUTER_API_KEY not found, using mock data');
-            return {
-                title: `[Mock] ${videoTitle}`,
-                content: `这是基于视频字幕的摘要。\n\n主要内容：\n${transcript.substring(0, 200)}...`,
-                tags: ['#YouTube', '#AI生成', '#小红书']
-            };
+            return buildContentPayload(
+                `[Mock] ${videoTitle}`,
+                `这是基于视频字幕的摘要。\n\n主要内容：\n${transcript.substring(0, 200)}...`,
+                ['#YouTube', '#AI生成', '#小红书']
+            );
         }
 
         // Build prompt based on style
         const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS['故事模式'];
 
         const systemPrompt = SYSTEM_PROMPT_TEMPLATE.replace('{{STYLE_PROMPT}}', stylePrompt);
+        const preparedTranscript = prepareTranscriptForPrompt(transcript);
+        console.log('[AIService] Transcript chars:', transcript.length, '=> prompt chars:', preparedTranscript.length);
 
-        const userPrompt = `视频标题：${videoTitle}\n\n视频字幕：\n${transcript}`;
+        const userPrompt = `视频标题：${videoTitle}\n\n以下是去重并压缩后的关键字幕片段，请基于这些内容生成结构清晰、信息准确的文章：\n${preparedTranscript}`;
 
         try {
             const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -81,11 +204,11 @@ export class AIService {
                 console.log('[AIService] Parsing JSON string:', jsonStr.substring(0, 100) + '...');
                 const parsed = JSON.parse(jsonStr.trim());
 
-                return {
-                    title: parsed.title || videoTitle,
-                    content: parsed.content || aiResponse,
-                    tags: Array.isArray(parsed.tags) ? parsed.tags : ['#YouTube', '#AI生成']
-                };
+                return buildContentPayload(
+                    parsed.title || videoTitle,
+                    parsed.content || aiResponse,
+                    Array.isArray(parsed.tags) ? parsed.tags : ['#YouTube', '#AI生成']
+                );
             } catch (parseError) {
                 console.error('[AIService] JSON Parse Error:', parseError);
                 console.log('[AIService] Raw AI Response:', aiResponse);
@@ -95,29 +218,29 @@ export class AIService {
                 const contentMatch = aiResponse.match(/"content"\s*:\s*"([^"]*)"/); // This might fail for multiline content
 
                 if (titleMatch || contentMatch) {
-                    return {
-                        title: titleMatch ? titleMatch[1] : videoTitle,
-                        content: aiResponse, // It's safer to return full response if content regex fails
-                        tags: ['#YouTube', '#AI生成', '#小红书']
-                    };
+                    return buildContentPayload(
+                        titleMatch ? titleMatch[1] : videoTitle,
+                        aiResponse,
+                        ['#YouTube', '#AI生成', '#小红书']
+                    );
                 }
 
                 // Absolute fallback
-                return {
-                    title: videoTitle,
-                    content: aiResponse,
-                    tags: ['#YouTube', '#AI生成', '#小红书']
-                };
+                return buildContentPayload(
+                    videoTitle,
+                    aiResponse,
+                    ['#YouTube', '#AI生成', '#小红书']
+                );
             }
 
         } catch (error: any) {
             console.error('AI generation error:', error);
             // Fallback to mock data with error details
-            return {
-                title: `${videoTitle}`,
-                content: `生成内容时出现错误：${error.message || '未知错误'}\n\n建议：请在首页尝试选择其他免费模型（如 Qwen 或 GLM）。\n\n视频摘要：\n${transcript.substring(0, 300)}...`,
-                tags: ['#YouTube', '#视频摘要', '#错误提示']
-            };
+            return buildContentPayload(
+                `${videoTitle}`,
+                `生成内容时出现错误：${error.message || '未知错误'}\n\n建议：请在首页尝试选择其他免费模型（如 Qwen 或 GLM）。\n\n视频摘要：\n${transcript.substring(0, 300)}...`,
+                ['#YouTube', '#视频摘要', '#错误提示']
+            );
         }
     }
 }

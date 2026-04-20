@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, ChevronDown } from 'lucide-react';
+import { Loader2, ChevronDown, Clock } from 'lucide-react';
 import { youtubeClientProvider } from '@/lib/services/youtube-client-provider';
 import type { TranscriptItem, VideoMetadata } from '@/lib/services/transcript-provider';
 import { AI_MODELS, DEFAULT_MODEL } from '@/lib/constants/models';
@@ -19,11 +19,62 @@ export default function Home() {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState('');
 
+  // History State
+  interface HistoryItem {
+    id: string;
+    title: string;
+    thumbnailUrl: string;
+    updatedAt: number;
+  }
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  useEffect(() => {
+    try {
+      const items: HistoryItem[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('project_')) {
+          try {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const data = JSON.parse(raw);
+              items.push({
+                id: data.metadata?.id || key.replace('project_', ''),
+                title: data.generated?.title || data.metadata?.title || '未命名项目',
+                thumbnailUrl: data.metadata?.thumbnailUrl || '',
+                // Fallback to a default time if no updatedAt was saved before
+                updatedAt: data.updatedAt || Date.now() - (Math.random() * 100000) 
+              });
+            }
+          } catch (e) {
+            console.error('Failed to parse history item', e);
+          }
+        }
+      }
+      // Sort by latest and take top 4
+      items.sort((a, b) => b.updatedAt - a.updatedAt);
+      setHistory(items.slice(0, 4));
+    } catch (err) {
+      console.error('Failed to load history', err);
+    }
+  }, []);
+
   // API Key Modal State
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [savingApiKey, setSavingApiKey] = useState(false);
   const router = useRouter();
+
+  const formatProcessError = (data: any) => {
+    const messages = [
+      typeof data?.error === 'string' ? data.error.trim() : '',
+      typeof data?.transcriptError === 'string' && data.transcriptError.trim() !== data?.error?.trim()
+        ? `排查信息：${data.transcriptError.trim()}`
+        : '',
+    ].filter(Boolean);
+
+    return messages.join('\n') || '处理失败，请重试';
+  };
 
   const checkApiKey = async () => {
     try {
@@ -137,11 +188,15 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || '处理失败，请重试');
+        throw new Error(formatProcessError(data));
       }
 
       // 4. 保存到本地存储并跳转
-      localStorage.setItem(`project_${videoId}`, JSON.stringify(data));
+      const projectData = {
+        ...data,
+        updatedAt: Date.now(),
+      };
+      localStorage.setItem(`project_${videoId}`, JSON.stringify(projectData));
       router.push(`/edit/${videoId}`);
 
     } catch (err: any) {
@@ -191,8 +246,8 @@ export default function Home() {
               autoFocus
             />
 
-            {/* Fixed height container for error message - prevents layout shift */}
-            <div className="h-5 text-sm text-red-500 font-medium">
+            {/* Reserve enough room for multi-line diagnostics */}
+            <div className="min-h-[2.5rem] whitespace-pre-line text-sm leading-5 text-red-500 font-medium">
               {error}
             </div>
 
@@ -244,6 +299,50 @@ export default function Home() {
             </div>
           </form>
         </div>
+
+        {/* History Section */}
+        {history.length > 0 && (
+          <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center gap-2 mb-4 px-1">
+              <Clock className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-medium text-gray-500">最近生成</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {history.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => router.push(`/edit/${item.id}`)}
+                  className="bg-white border border-[#E5E5E5] rounded-xl p-3 cursor-pointer hover:border-black hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] transition-all flex items-center gap-3 group"
+                >
+                  {item.thumbnailUrl ? (
+                    <div className="relative w-[72px] h-[40px] rounded-md overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
+                      <span className="text-gray-400 text-[10px] absolute z-0">无图</span>
+                      <img 
+                        src={item.thumbnailUrl} 
+                        alt={item.title} 
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 relative z-10" 
+                        onError={(e) => {
+                          e.currentTarget.style.opacity = '0';
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-[72px] h-[40px] bg-gray-100 rounded-md shrink-0 flex items-center justify-center">
+                      <span className="text-gray-400 text-[10px]">无图</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <h3 className="text-[13px] font-medium text-gray-900 truncate leading-tight group-hover:text-black transition-colors">{item.title}</h3>
+                    <p className="text-[11px] text-gray-400 mt-1 truncate">
+                      {new Date(item.updatedAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* API Key Modal */}

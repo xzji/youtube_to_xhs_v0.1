@@ -36,6 +36,9 @@ yarn-error.log*
 # binaries
 /bin
 /public/temp
+/subtitle-service/dist
+/subtitle-service/node_modules
+/youtube_cookies_base64.txt
 
 # vercel
 .vercel

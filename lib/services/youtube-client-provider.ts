@@ -10,6 +10,62 @@ import type { TranscriptProvider, TranscriptItem, VideoMetadata } from './transc
 // Railway 字幕服务 API 地址（部署后需要更新）
 const SUBTITLE_SERVICE_URL = process.env.NEXT_PUBLIC_SUBTITLE_API_URL || 'https://youtubetoxhsv01-production.up.railway.app';
 
+function getSubtitleServiceHint(details: string): string | null {
+    if (!details) {
+        return null;
+    }
+
+    if (details.includes('Sign in to confirm you’re not a bot')) {
+        return 'YouTube 要求登录验证。请检查字幕服务的 YouTube cookies 是否有效，并确认 Railway 已用最新环境变量重新部署。';
+    }
+
+    if (details.includes('yt-dlp: not found')) {
+        return '字幕服务缺少 yt-dlp 依赖。请检查 Railway 是否按 Dockerfile 构建。';
+    }
+
+    if (details.includes('No supported JavaScript runtime could be found')) {
+        return '字幕服务缺少可用的 JavaScript runtime。请检查服务是否已部署到最新版本。';
+    }
+
+    if (details.includes('Application not found')) {
+        return '字幕服务地址当前不可用。请检查 Railway 域名、服务状态或环境变量配置。';
+    }
+
+    if (details.includes('Failed to download yt-dlp')) {
+        return '字幕服务启动时下载 yt-dlp 失败。请检查 Railway 构建日志和外网访问。';
+    }
+
+    return null;
+}
+
+function formatSubtitleServiceError(errorData: any, status: number): string {
+    const baseMessage = typeof errorData?.error === 'string' && errorData.error.trim().length > 0
+        ? errorData.error.trim()
+        : `HTTP ${status}`;
+    const details = typeof errorData?.details === 'string' ? errorData.details : '';
+    const hint = getSubtitleServiceHint(details);
+
+    if (hint) {
+        return `${baseMessage}\n排查建议：${hint}`;
+    }
+
+    if (details) {
+        const detailLines = details
+            .split('\n')
+            .map((line: string) => line.trim())
+            .filter(Boolean);
+        const actionableLine = detailLines.find((line: string) => line.startsWith('ERROR:'))
+            || detailLines.find((line: string) => line.startsWith('WARNING:'))
+            || detailLines.find((line: string) => !line.startsWith('Command failed:'));
+
+        if (actionableLine) {
+            return `${baseMessage}\n排查建议：${actionableLine.replace(/^(ERROR|WARNING):\s*/, '')}`;
+        }
+    }
+
+    return baseMessage;
+}
+
 // 内存缓存
 interface CacheEntry {
     data: TranscriptItem[];
@@ -52,7 +108,7 @@ export class YouTubeClientProvider implements TranscriptProvider {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}`);
+                throw new Error(formatSubtitleServiceError(errorData, response.status));
             }
 
             const data = await response.json();
@@ -86,7 +142,7 @@ export class YouTubeClientProvider implements TranscriptProvider {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}`);
+                throw new Error(formatSubtitleServiceError(errorData, response.status));
             }
 
             const metadata = await response.json();
