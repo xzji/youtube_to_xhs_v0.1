@@ -10,7 +10,7 @@ import { AI_MODELS, DEFAULT_MODEL } from '@/lib/constants/models';
 import { fetchWithTimeout, FetchTimeoutError } from '@/lib/utils/fetch-with-timeout';
 
 const CONFIG_TIMEOUT_MS = 8000;
-const PROCESS_TIMEOUT_MS = 60000;
+const PROCESS_TIMEOUT_MS = 90000;
 const MODEL_STORAGE_KEY = 'youtube2xhs_model';
 
 export default function Home() {
@@ -214,7 +214,7 @@ export default function Home() {
     } catch (err: any) {
       console.error('Error:', err);
       if (err instanceof FetchTimeoutError) {
-        setError(`处理超时（>${Math.ceil(err.timeoutMs / 1000)}s）。已为你切换为更快的默认模型，若仍失败请重试或更换模型。`);
+        setError(`处理超时（>${Math.ceil(err.timeoutMs / 1000)}s）。当前模型响应较慢，请重试或切换到更快的模型。`);
       } else {
         setError(err.message || '发生未知错误，请重试');
       }
