@@ -7,13 +7,15 @@ import { Loader2, ChevronDown, Clock } from 'lucide-react';
 import { youtubeClientProvider } from '@/lib/services/youtube-client-provider';
 import type { TranscriptItem, VideoMetadata } from '@/lib/services/transcript-provider';
 import { AI_MODELS, DEFAULT_MODEL } from '@/lib/constants/models';
+import { fetchWithTimeout, FetchTimeoutError } from '@/lib/utils/fetch-with-timeout';
+
+const CONFIG_TIMEOUT_MS = 8000;
+const PROCESS_TIMEOUT_MS = 60000;
+const MODEL_STORAGE_KEY = 'youtube2xhs_model';
 
 export default function Home() {
   const [url, setUrl] = useState('');
   const [model, setModel] = useState(DEFAULT_MODEL);
-  console.log('Current Model:', model);
-  console.log('Default Model:', DEFAULT_MODEL);
-  console.log('Available Models:', AI_MODELS);
   const [style, setStyle] = useState('故事模式');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
@@ -29,6 +31,16 @@ export default function Home() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
+    // Restore user's last selected model (if still available).
+    try {
+      const stored = localStorage.getItem(MODEL_STORAGE_KEY);
+      if (stored && AI_MODELS.some((m) => m.id === stored)) {
+        setModel(stored);
+      }
+    } catch (err) {
+      console.error('Failed to restore model selection', err);
+    }
+
     try {
       const items: HistoryItem[] = [];
       for (let i = 0; i < localStorage.length; i++) {
@@ -78,7 +90,7 @@ export default function Home() {
 
   const checkApiKey = async () => {
     try {
-      const response = await fetch('/api/config');
+      const response = await fetchWithTimeout('/api/config', undefined, CONFIG_TIMEOUT_MS);
       const data = await response.json();
       return data.hasApiKey;
     } catch (error) {
@@ -170,7 +182,7 @@ export default function Home() {
 
       // 3. 发送到后端进行 AI 内容生成
       setLoadingMessage('正在生成内容...');
-      const response = await fetch('/api/process', {
+      const response = await fetchWithTimeout('/api/process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -183,7 +195,7 @@ export default function Home() {
           transcript,
           metadata
         }),
-      });
+      }, PROCESS_TIMEOUT_MS);
 
       const data = await response.json();
 
@@ -201,7 +213,11 @@ export default function Home() {
 
     } catch (err: any) {
       console.error('Error:', err);
-      setError(err.message || '发生未知错误，请重试');
+      if (err instanceof FetchTimeoutError) {
+        setError(`处理超时（>${Math.ceil(err.timeoutMs / 1000)}s）。已为你切换为更快的默认模型，若仍失败请重试或更换模型。`);
+      } else {
+        setError(err.message || '发生未知错误，请重试');
+      }
     } finally {
       setLoading(false);
       setLoadingMessage('');
@@ -254,7 +270,17 @@ export default function Home() {
             <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-2">
               {/* Left: Model Selector */}
               <div className="flex items-center">
-                <Select value={model} onValueChange={setModel}>
+                <Select
+                  value={model}
+                  onValueChange={(nextModel) => {
+                    setModel(nextModel);
+                    try {
+                      localStorage.setItem(MODEL_STORAGE_KEY, nextModel);
+                    } catch (err) {
+                      console.error('Failed to persist model selection', err);
+                    }
+                  }}
+                >
                   <SelectTrigger className="h-auto p-0 !border-none !shadow-none focus:ring-0 focus-visible:!ring-0 focus-visible:!border-none bg-transparent gap-1.5 text-sm text-[#333] hover:text-black data-[state=open]:text-black w-auto cursor-pointer">
                     <SelectValue placeholder="选择模型" />
                   </SelectTrigger>

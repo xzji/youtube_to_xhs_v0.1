@@ -34,6 +34,15 @@ import {
 } from 'lucide-react';
 import { mergeRegister } from '@lexical/utils';
 import { TOGGLE_LINK_COMMAND } from '@lexical/link';
+import {
+    HIGHLIGHT_BACKGROUND_COLOR,
+    HIGHLIGHT_BORDER_COLOR,
+    HIGHLIGHT_BORDER_WIDTH_PX,
+    HIGHLIGHT_FONT_WEIGHT,
+    HIGHLIGHT_PADDING_X_PX,
+    HIGHLIGHT_PADDING_Y_PX,
+    HIGHLIGHT_RADIUS_PX,
+} from '@/lib/constants/highlight-style';
 
 
 export default function ToolbarPlugin() {
@@ -52,7 +61,7 @@ export default function ToolbarPlugin() {
             setIsItalic(selection.hasFormat('italic'));
             setIsUnderline(selection.hasFormat('underline'));
             // Check for highlight style (background-color)
-            const backgroundColor = $getSelectionStyleValueForProperty(selection, 'background-color', '#fff59d');
+            const backgroundColor = $getSelectionStyleValueForProperty(selection, 'background-color', HIGHLIGHT_BACKGROUND_COLOR);
             setIsHighlight(!!backgroundColor);
         }
     }, []);
@@ -131,11 +140,11 @@ export default function ToolbarPlugin() {
             if ($isRangeSelection(selection)) {
                 // 使用 mark 标签模拟高亮
                 $patchStyleText(selection, {
-                    'background-color': '#fff59d',
-                    'border-bottom': '2px solid #ff9800',
-                    'border-radius': '4px',
-                    'padding': '2px 6px',
-                    'font-weight': 'bold',
+                    'background-color': HIGHLIGHT_BACKGROUND_COLOR,
+                    'border-bottom': `${HIGHLIGHT_BORDER_WIDTH_PX}px solid ${HIGHLIGHT_BORDER_COLOR}`,
+                    'border-radius': `${HIGHLIGHT_RADIUS_PX}px`,
+                    'padding': `${HIGHLIGHT_PADDING_Y_PX}px ${HIGHLIGHT_PADDING_X_PX}px`,
+                    'font-weight': HIGHLIGHT_FONT_WEIGHT,
                 });
             }
         });

@@ -6,9 +6,24 @@
  */
 
 import type { TranscriptProvider, TranscriptItem, VideoMetadata } from './transcript-provider';
+import { fetchWithTimeout } from '@/lib/utils/fetch-with-timeout';
+
+function normalizeSubtitleServiceUrl(rawUrl?: string): string {
+    const trimmed = rawUrl?.trim();
+    const fallbackUrl = 'https://youtubetoxhsv01-production.up.railway.app';
+
+    if (!trimmed) {
+        return fallbackUrl;
+    }
+
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return withProtocol.replace(/\/+$/, '');
+}
 
 // Railway 字幕服务 API 地址（部署后需要更新）
-const SUBTITLE_SERVICE_URL = process.env.NEXT_PUBLIC_SUBTITLE_API_URL || 'https://youtubetoxhsv01-production.up.railway.app';
+const SUBTITLE_SERVICE_URL = normalizeSubtitleServiceUrl(process.env.NEXT_PUBLIC_SUBTITLE_API_URL);
+const METADATA_TIMEOUT_MS = 15000;
+const TRANSCRIPT_TIMEOUT_MS = 35000;
 
 function getSubtitleServiceHint(details: string): string | null {
     if (!details) {
@@ -104,7 +119,11 @@ export class YouTubeClientProvider implements TranscriptProvider {
 
         try {
             // 调用 Railway 字幕服务
-            const response = await fetch(`${SUBTITLE_SERVICE_URL}/api/transcript?videoId=${videoId}&lang=en`);
+            const response = await fetchWithTimeout(
+                `${SUBTITLE_SERVICE_URL}/api/transcript?videoId=${videoId}&lang=en`,
+                undefined,
+                TRANSCRIPT_TIMEOUT_MS
+            );
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -138,7 +157,11 @@ export class YouTubeClientProvider implements TranscriptProvider {
 
         try {
             // 调用 Railway 字幕服务获取元数据
-            const response = await fetch(`${SUBTITLE_SERVICE_URL}/api/metadata?videoId=${videoId}`);
+            const response = await fetchWithTimeout(
+                `${SUBTITLE_SERVICE_URL}/api/metadata?videoId=${videoId}`,
+                undefined,
+                METADATA_TIMEOUT_MS
+            );
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));

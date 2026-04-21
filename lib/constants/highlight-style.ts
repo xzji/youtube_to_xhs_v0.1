@@ -1,0 +1,9 @@
+export const HIGHLIGHT_BACKGROUND_COLOR = '#fff59d';
+export const HIGHLIGHT_BORDER_COLOR = '#ff9800';
+export const HIGHLIGHT_TEXT_COLOR = '#000000';
+export const HIGHLIGHT_BORDER_WIDTH_PX = 2;
+export const HIGHLIGHT_RADIUS_PX = 4;
+export const HIGHLIGHT_PADDING_Y_PX = 2;
+export const HIGHLIGHT_PADDING_X_PX = 6;
+export const HIGHLIGHT_FONT_WEIGHT = 'bold';
+export const HIGHLIGHT_MARK_CLASS = 'editor-highlight-mark';

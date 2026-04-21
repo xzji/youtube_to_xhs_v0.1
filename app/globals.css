@@ -76,6 +76,14 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --editor-highlight-bg: #fff59d;
+  --editor-highlight-border: #ff9800;
+  --editor-highlight-text: #000000;
+  --editor-highlight-radius: 4px;
+  --editor-highlight-padding-y: 2px;
+  --editor-highlight-padding-x: 6px;
+  --editor-highlight-border-width: 2px;
+  --editor-highlight-font-weight: 700;
 }
 
 .dark {
@@ -118,5 +126,17 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  .editor-highlight-mark {
+    background-color: var(--editor-highlight-bg);
+    color: var(--editor-highlight-text);
+    border-bottom: var(--editor-highlight-border-width) solid var(--editor-highlight-border);
+    border-radius: var(--editor-highlight-radius);
+    padding: var(--editor-highlight-padding-y) var(--editor-highlight-padding-x);
+    font-weight: var(--editor-highlight-font-weight);
+    text-decoration: none;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
   }
 }

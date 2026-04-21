@@ -117,7 +117,7 @@ export function getPreviewStyles(cardWidth: number) {
             textDecoration: 'none',
             textDecorationLine: 'none',
             border: 'none',
-            borderBottom: 'none',
+            borderBottom: `${2 * scale}px solid #ff9800`,
             boxShadow: 'none',
             display: 'inline',
             WebkitBoxDecorationBreak: 'clone',

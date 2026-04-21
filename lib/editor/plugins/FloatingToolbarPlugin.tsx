@@ -29,6 +29,15 @@ import { mergeRegister } from '@lexical/utils';
 import { TOGGLE_LINK_COMMAND } from '@lexical/link';
 import { $patchStyleText } from '@lexical/selection';
 import { createPortal } from 'react-dom';
+import {
+    HIGHLIGHT_BACKGROUND_COLOR,
+    HIGHLIGHT_BORDER_COLOR,
+    HIGHLIGHT_BORDER_WIDTH_PX,
+    HIGHLIGHT_FONT_WEIGHT,
+    HIGHLIGHT_PADDING_X_PX,
+    HIGHLIGHT_PADDING_Y_PX,
+    HIGHLIGHT_RADIUS_PX,
+} from '@/lib/constants/highlight-style';
 
 export default function FloatingToolbarPlugin() {
     const [editor] = useLexicalComposerContext();
@@ -190,7 +199,8 @@ export default function FloatingToolbarPlugin() {
                 const isHighlighted = nodes.some(node => {
                     if ('getStyle' in node && typeof node.getStyle === 'function') {
                         const style = node.getStyle() as string;
-                        return style.includes('background-color: #fff59d') || style.includes('background-color: rgb(255, 245, 157)');
+                        return style.includes(`background-color: ${HIGHLIGHT_BACKGROUND_COLOR}`)
+                            || style.includes('background-color: rgb(255, 245, 157)');
                     }
                     return false;
                 });
@@ -205,11 +215,11 @@ export default function FloatingToolbarPlugin() {
                     });
                 } else {
                     $patchStyleText(selection, {
-                        'background-color': '#fff59d',
-                        'border-bottom': '2px solid #ff9800',
-                        'border-radius': '4px',
-                        'padding': '2px 6px',
-                        'font-weight': 'bold',
+                        'background-color': HIGHLIGHT_BACKGROUND_COLOR,
+                        'border-bottom': `${HIGHLIGHT_BORDER_WIDTH_PX}px solid ${HIGHLIGHT_BORDER_COLOR}`,
+                        'border-radius': `${HIGHLIGHT_RADIUS_PX}px`,
+                        'padding': `${HIGHLIGHT_PADDING_Y_PX}px ${HIGHLIGHT_PADDING_X_PX}px`,
+                        'font-weight': HIGHLIGHT_FONT_WEIGHT,
                     });
                 }
             }

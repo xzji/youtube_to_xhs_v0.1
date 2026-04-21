@@ -26,4 +26,4 @@ export const AI_MODELS: AIModel[] = [
     }
 ];
 
-export const DEFAULT_MODEL = AI_MODELS[0].id;
+export const DEFAULT_MODEL = 'google/gemma-4-31b-it:free';

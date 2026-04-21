@@ -58,7 +58,7 @@
   padding: 2px 6px;
   text-decoration: none;
   border: none;
-  border-bottom: none;
+  border-bottom: 2px solid #ff9800;
   box-shadow: none;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;

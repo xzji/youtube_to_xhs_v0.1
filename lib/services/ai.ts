@@ -1,9 +1,11 @@
 import { STYLE_PROMPTS, SYSTEM_PROMPT_TEMPLATE } from '@/lib/constants/prompts';
 import { DEFAULT_MODEL } from '@/lib/constants/models';
 import { formatGeneratedContent } from '@/lib/utils/content-emphasis';
+import { fetchWithTimeout, FetchTimeoutError } from '@/lib/utils/fetch-with-timeout';
 
 const MAX_PROMPT_TRANSCRIPT_CHARS = 12000;
 const MIN_SEGMENT_LENGTH = 18;
+const OPENROUTER_TIMEOUT_MS = 45000;
 
 function normalizeSegment(text: string): string {
     return text
@@ -94,20 +96,17 @@ function selectRepresentativeSegments(segments: string[], maxChars: number): str
 }
 
 function prepareTranscriptForPrompt(transcript: string): string {
-    const normalized = normalizeSegment(transcript);
-    if (normalized.length <= MAX_PROMPT_TRANSCRIPT_CHARS) {
-        return normalized;
-    }
-
-    const segments = dedupeSegments(splitTranscriptIntoSegments(transcript));
-    const selectedSegments = selectRepresentativeSegments(segments, MAX_PROMPT_TRANSCRIPT_CHARS);
-    const condensed = selectedSegments.join('\n');
-
-    if (condensed.length > 0) {
-        return condensed;
-    }
-
-    return normalized.slice(0, MAX_PROMPT_TRANSCRIPT_CHARS);
+    // Keep original content order. Only do light cleaning:
+    // - strip bracketed/parenthetical annotations
+    // - normalize whitespace within each line
+    // - preserve line breaks
+    return transcript
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map((line) => normalizeSegment(line))
+        .filter(Boolean)
+        .join('\n')
+        .trim();
 }
 
 function buildContentPayload(
@@ -150,24 +149,28 @@ export class AIService {
         const userPrompt = `视频标题：${videoTitle}\n\n以下是去重并压缩后的关键字幕片段，请基于这些内容生成结构清晰、信息准确的文章：\n${preparedTranscript}`;
 
         try {
-            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'HTTP-Referer': process.env.SITE_URL || 'http://localhost:3000',
-                    'X-Title': 'YouTube to XHS Converter',
-                    'Content-Type': 'application/json'
+            const response = await fetchWithTimeout(
+                'https://openrouter.ai/api/v1/chat/completions',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'HTTP-Referer': process.env.SITE_URL || 'http://localhost:3000',
+                        'X-Title': 'YouTube to XHS Converter',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: userPrompt }
+                        ],
+                        temperature: 0.7,
+                        max_tokens: 2000
+                    })
                 },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userPrompt }
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 2000
-                })
-            });
+                OPENROUTER_TIMEOUT_MS
+            );
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -236,9 +239,13 @@ export class AIService {
         } catch (error: any) {
             console.error('AI generation error:', error);
             // Fallback to mock data with error details
+            const errorMessage = error instanceof FetchTimeoutError
+                ? `AI 生成超时（>${Math.ceil(OPENROUTER_TIMEOUT_MS / 1000)}s），当前免费模型响应较慢，请切换到 Gemma 4 31B 后重试。`
+                : error.message || '未知错误';
+
             return buildContentPayload(
                 `${videoTitle}`,
-                `生成内容时出现错误：${error.message || '未知错误'}\n\n建议：请在首页尝试选择其他免费模型（如 Qwen 或 GLM）。\n\n视频摘要：\n${transcript.substring(0, 300)}...`,
+                `生成内容时出现错误：${errorMessage}\n\n建议：请在首页尝试选择更快的免费模型（推荐 Gemma 4 31B）。\n\n视频摘要：\n${transcript.substring(0, 300)}...`,
                 ['#YouTube', '#视频摘要', '#错误提示']
             );
         }

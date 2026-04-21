@@ -1,3 +1,5 @@
+import { HIGHLIGHT_MARK_CLASS } from '@/lib/constants/highlight-style';
+
 const BLOCK_TAG_PATTERN = /<(p|h[1-6]|ul|ol|li|blockquote|pre|div)\b/i;
 const ANY_TAG_PATTERN = /<[^>]+>/;
 const SKIP_INLINE_TAGS = new Set(['strong', 'mark', 'code', 'pre', 'a']);
@@ -77,6 +79,10 @@ function wrapPattern(text: string, pattern: RegExp, tagName: 'strong' | 'mark'):
 
     if (!safeTarget) {
       return _match;
+    }
+
+    if (tagName === 'mark') {
+      return `${safePrefix}<mark class="${HIGHLIGHT_MARK_CLASS}">${safeTarget}</mark>`;
     }
 
     return `${safePrefix}<${tagName}>${safeTarget}</${tagName}>`;

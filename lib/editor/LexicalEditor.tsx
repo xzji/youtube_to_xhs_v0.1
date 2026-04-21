@@ -20,6 +20,7 @@ import FloatingToolbarPlugin from './plugins/FloatingToolbarPlugin';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import { useEffect } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { HIGHLIGHT_MARK_CLASS } from '@/lib/constants/highlight-style';
 
 interface LexicalEditorProps {
     value: string; // HTML string
@@ -48,7 +49,7 @@ const theme = {
         code: 'bg-gray-100 px-1 py-0.5 rounded font-mono text-sm',
     },
     code: 'bg-gray-100 p-4 rounded-lg font-mono text-sm my-2 block',
-    mark: 'bg-yellow-200 px-1 rounded font-semibold',  // 高亮标记样式
+    mark: HIGHLIGHT_MARK_CLASS,  // 高亮标记样式（与工具栏一致）
 };
 
 // HTML 到编辑器的初始化插件
