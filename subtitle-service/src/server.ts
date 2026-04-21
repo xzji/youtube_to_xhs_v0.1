@@ -11,6 +11,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
+import { fetchTranscript } from '@egoist/youtube-transcript-plus';
 
 const execFileAsync = promisify(execFile);
 const YT_DLP_DOWNLOAD_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
@@ -19,6 +20,39 @@ const YOUTUBE_COOKIES_CACHE_PATH = process.env.YOUTUBE_COOKIES_CACHE_PATH || '/t
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// #region debug-point A:reporter
+async function reportDebugEvent(hypothesisId: string, msg: string, data: Record<string, unknown>) {
+    let debugUrl = 'http://127.0.0.1:7777/event';
+    let sessionId = 'metadata-bot-check';
+
+    try {
+        const envContent = await fs.promises.readFile('.dbg/metadata-bot-check.env', 'utf-8');
+        debugUrl = envContent.match(/DEBUG_SERVER_URL=(.+)/)?.[1]?.trim() || debugUrl;
+        sessionId = envContent.match(/DEBUG_SESSION_ID=(.+)/)?.[1]?.trim() || sessionId;
+    } catch {
+        // Ignore missing debug env in non-debug runs.
+    }
+
+    try {
+        await fetch(debugUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId,
+                runId: 'pre-fix',
+                hypothesisId,
+                location: 'subtitle-service/src/server.ts',
+                msg: `[DEBUG] ${msg}`,
+                data,
+                ts: Date.now(),
+            }),
+        });
+    } catch {
+        // Ignore debug reporting failures.
+    }
+}
+// #endregion
 
 // Enable CORS for Cloudflare frontend
 app.use(cors({
@@ -137,6 +171,75 @@ async function buildYtDlpArgs(commandArgs: string[]): Promise<string[]> {
     return finalArgs;
 }
 
+async function fetchMetadataFromOEmbed(videoId: string) {
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`;
+    const response = await fetch(oEmbedUrl, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0',
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`oEmbed HTTP ${response.status}`);
+    }
+
+    const data = await response.json() as {
+        title?: string;
+        thumbnail_url?: string;
+    };
+
+    return {
+        id: videoId,
+        title: data.title || `video_${videoId}`,
+        description: '',
+        thumbnailUrl: data.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        duration: 0,
+    };
+}
+
+function buildTranscriptLanguagePriority(requestedLang: string): string[] {
+    const baseLang = requestedLang.replace(/\.\*/g, '').trim();
+    const priority = [
+        baseLang,
+        baseLang === 'en' ? 'en-US' : '',
+        baseLang === 'en' ? 'en-GB' : '',
+        'zh',
+        'zh-Hans',
+        'zh-Hant',
+        'zh-CN',
+        'zh-TW',
+        'en',
+    ].filter(Boolean);
+
+    return Array.from(new Set(priority));
+}
+
+async function fetchTranscriptWithLibrary(videoId: string, requestedLang: string): Promise<Array<{ offset: number; duration: number; text: string }>> {
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const candidates = buildTranscriptLanguagePriority(requestedLang);
+    let lastError: Error | null = null;
+
+    for (const lang of candidates) {
+        try {
+            const result = await fetchTranscript(url, { lang }) as any;
+            const segments = result?.segments || result?.transcript || result || [];
+
+            if (Array.isArray(segments) && segments.length > 0) {
+                return segments.map((item: any) => ({
+                    offset: Number(item.offset ?? item.start ?? 0),
+                    duration: Number(item.duration ?? item.dur ?? 0),
+                    text: String(item.text ?? '').trim(),
+                })).filter((item) => item.text.length > 0);
+            }
+        } catch (error: any) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('No transcript available from fallback provider');
+}
+
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -153,11 +256,22 @@ app.get('/api/metadata', async (req: Request, res: Response) => {
     try {
         const ytDlpPath = await ensureYtDlp();
         const url = `https://www.youtube.com/watch?v=${videoId}`;
+        // #region debug-point A:metadata-start
+        await reportDebugEvent('A', 'metadata fetch started', { videoId, url });
+        // #endregion
         const { stdout } = await execFileAsync(
             ytDlpPath,
             await buildYtDlpArgs(['--dump-json', '--skip-download', url])
         );
         const metadata = JSON.parse(stdout);
+
+        // #region debug-point A:metadata-success
+        await reportDebugEvent('A', 'metadata fetch succeeded', {
+            videoId,
+            hasTitle: Boolean(metadata?.title),
+            hasThumbnail: Boolean(metadata?.thumbnail),
+        });
+        // #endregion
 
         res.json({
             id: videoId,
@@ -167,8 +281,33 @@ app.get('/api/metadata', async (req: Request, res: Response) => {
             duration: metadata.duration,
         });
     } catch (error: any) {
-        console.error('Metadata fetch error:', error);
-        res.status(500).json({ error: 'Failed to fetch video metadata', details: error.message });
+        // #region debug-point B:metadata-yt-dlp-error
+        await reportDebugEvent('B', 'metadata fetch failed via yt-dlp', {
+            videoId,
+            error: error?.message || 'unknown',
+        });
+        // #endregion
+
+        try {
+            const fallbackMetadata = await fetchMetadataFromOEmbed(videoId);
+            // #region debug-point E:metadata-fallback-success
+            await reportDebugEvent('E', 'metadata fallback succeeded via oEmbed', {
+                videoId,
+                title: fallbackMetadata.title,
+            });
+            // #endregion
+            res.json(fallbackMetadata);
+        } catch (fallbackError: any) {
+            // #region debug-point E:metadata-fallback-error
+            await reportDebugEvent('E', 'metadata fallback failed', {
+                videoId,
+                error: fallbackError?.message || 'unknown',
+            });
+            // #endregion
+            console.error('Metadata fetch error:', error);
+            console.error('Metadata fallback error:', fallbackError);
+            res.status(500).json({ error: 'Failed to fetch video metadata', details: error.message });
+        }
     }
 });
 
@@ -195,6 +334,9 @@ app.get('/api/transcript', async (req: Request, res: Response) => {
 
         // Fetch subtitles using yt-dlp
         console.log(`[Subtitle Service] Fetching subtitles for ${videoId} (${language})`);
+        // #region debug-point C:transcript-start
+        await reportDebugEvent('C', 'transcript fetch started', { videoId, language });
+        // #endregion
 
         await execFileAsync(
             ytDlpPath,
@@ -228,6 +370,13 @@ app.get('/api/transcript', async (req: Request, res: Response) => {
         const transcript = parseVTT(vttContent);
 
         console.log(`[Subtitle Service] ✓ Fetched ${transcript.length} subtitle segments`);
+        // #region debug-point C:transcript-success
+        await reportDebugEvent('C', 'transcript fetch succeeded', {
+            videoId,
+            language,
+            transcriptCount: transcript.length,
+        });
+        // #endregion
 
         res.json({
             videoId,
@@ -236,11 +385,43 @@ app.get('/api/transcript', async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error('Transcript fetch error:', error);
-        res.status(500).json({
-            error: 'Failed to fetch transcript',
-            details: error.message
+        // #region debug-point D:transcript-yt-dlp-error
+        await reportDebugEvent('D', 'transcript fetch failed via yt-dlp', {
+            videoId,
+            language,
+            error: error?.message || 'unknown',
         });
+        // #endregion
+
+        try {
+            const transcript = await fetchTranscriptWithLibrary(videoId, requestedLang);
+            // #region debug-point E:transcript-fallback-success
+            await reportDebugEvent('E', 'transcript fallback succeeded via youtube-transcript-plus', {
+                videoId,
+                language: requestedLang,
+                transcriptCount: transcript.length,
+            });
+            // #endregion
+            res.json({
+                videoId,
+                language: requestedLang,
+                transcript,
+            });
+        } catch (fallbackError: any) {
+            // #region debug-point E:transcript-fallback-error
+            await reportDebugEvent('E', 'transcript fallback failed', {
+                videoId,
+                language: requestedLang,
+                error: fallbackError?.message || 'unknown',
+            });
+            // #endregion
+            console.error('Transcript fetch error:', error);
+            console.error('Transcript fallback error:', fallbackError);
+            res.status(500).json({
+                error: 'Failed to fetch transcript',
+                details: error.message
+            });
+        }
     } finally {
         // Cleanup temp directory
         try {
