@@ -39,6 +39,7 @@ yarn-error.log*
 /subtitle-service/dist
 /subtitle-service/node_modules
 /youtube_cookies_base64.txt
+*youtube*cookies*.txt
 
 # vercel
 .vercel
