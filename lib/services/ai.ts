@@ -1,11 +1,24 @@
 import { STYLE_PROMPTS, SYSTEM_PROMPT_TEMPLATE } from '@/lib/constants/prompts';
-import { DEFAULT_MODEL } from '@/lib/constants/models';
+import { DEFAULT_MODEL, getModelProvider } from '@/lib/constants/models';
 import { formatGeneratedContent } from '@/lib/utils/content-emphasis';
 import { fetchWithTimeout, FetchTimeoutError } from '@/lib/utils/fetch-with-timeout';
 
 const MAX_PROMPT_TRANSCRIPT_CHARS = 12000;
 const MIN_SEGMENT_LENGTH = 18;
-const OPENROUTER_TIMEOUT_MS = 45000;
+const AI_TIMEOUT_MS = 45000;
+
+const AI_PROVIDERS = {
+    openrouter: {
+        name: 'OpenRouter',
+        apiKeyEnv: 'OPENROUTER_API_KEY',
+        endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    },
+    volcengine: {
+        name: '火山引擎方舟',
+        apiKeyEnv: 'ARK_API_KEY',
+        endpoint: 'https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions',
+    },
+} as const;
 
 function normalizeSegment(text: string): string {
     return text
@@ -75,7 +88,7 @@ function selectRepresentativeSegments(segments: string[], maxChars: number): str
         }
     }
 
-    let joined = selected.join('\n');
+    const joined = selected.join('\n');
     if (joined.length <= maxChars) {
         return selected;
     }
@@ -128,10 +141,12 @@ export class AIService {
         model: string = DEFAULT_MODEL,
         style: string = '故事模式'
     ): Promise<{ title: string; content: string; tags: string[] }> {
-        const apiKey = process.env.OPENROUTER_API_KEY;
+        const providerKey = getModelProvider(model);
+        const provider = AI_PROVIDERS[providerKey];
+        const apiKey = process.env[provider.apiKeyEnv];
 
         if (!apiKey) {
-            console.warn('OPENROUTER_API_KEY not found, using mock data');
+            console.warn(`${provider.apiKeyEnv} not found, using mock data`);
             return buildContentPayload(
                 `[Mock] ${videoTitle}`,
                 `这是基于视频字幕的摘要。\n\n主要内容：\n${transcript.substring(0, 200)}...`,
@@ -150,13 +165,15 @@ export class AIService {
 
         try {
             const response = await fetchWithTimeout(
-                'https://openrouter.ai/api/v1/chat/completions',
+                provider.endpoint,
                 {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${apiKey}`,
-                        'HTTP-Referer': process.env.SITE_URL || 'http://localhost:3000',
-                        'X-Title': 'YouTube to XHS Converter',
+                        ...(providerKey === 'openrouter' ? {
+                            'HTTP-Referer': process.env.SITE_URL || 'http://localhost:3000',
+                            'X-Title': 'YouTube to XHS Converter',
+                        } : {}),
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
@@ -169,12 +186,12 @@ export class AIService {
                         max_tokens: 2000
                     })
                 },
-                OPENROUTER_TIMEOUT_MS
+                AI_TIMEOUT_MS
             );
 
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+                throw new Error(`${provider.name} API error: ${response.status} - ${errorText}`);
             }
 
             const data = await response.json();
@@ -236,16 +253,18 @@ export class AIService {
                 );
             }
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('AI generation error:', error);
             // Fallback to mock data with error details
             const errorMessage = error instanceof FetchTimeoutError
-                ? `AI 生成超时（>${Math.ceil(OPENROUTER_TIMEOUT_MS / 1000)}s），当前免费模型响应较慢，请切换到 Gemma 4 31B 后重试。`
-                : error.message || '未知错误';
+                ? `AI 生成超时（>${Math.ceil(AI_TIMEOUT_MS / 1000)}s），当前模型响应较慢，请重试或切换模型。`
+                : error instanceof Error
+                    ? error.message
+                    : '未知错误';
 
             return buildContentPayload(
                 `${videoTitle}`,
-                `生成内容时出现错误：${errorMessage}\n\n建议：请在首页尝试选择更快的免费模型（推荐 Gemma 4 31B）。\n\n视频摘要：\n${transcript.substring(0, 300)}...`,
+                `生成内容时出现错误：${errorMessage}\n\n建议：请在首页尝试切换模型后重试。\n\n视频摘要：\n${transcript.substring(0, 300)}...`,
                 ['#YouTube', '#视频摘要', '#错误提示']
             );
         }

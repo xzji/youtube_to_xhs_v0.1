@@ -5,10 +5,17 @@ export const runtime = 'edge';
 export async function GET() {
     try {
         // In production, API key will be managed via environment variables
-        const hasApiKey = !!process.env.OPENROUTER_API_KEY;
-        return NextResponse.json({ hasApiKey });
-    } catch (error) {
-        return NextResponse.json({ hasApiKey: false }, { status: 500 });
+        const providers = {
+            openrouter: !!process.env.OPENROUTER_API_KEY,
+            volcengine: !!process.env.ARK_API_KEY,
+        };
+        const hasApiKey = providers.openrouter || providers.volcengine;
+        return NextResponse.json({ hasApiKey, providers });
+    } catch {
+        return NextResponse.json({
+            hasApiKey: false,
+            providers: { openrouter: false, volcengine: false },
+        }, { status: 500 });
     }
 }
 
@@ -24,11 +31,12 @@ export async function POST(req: NextRequest) {
         // API keys should be configured via environment variables in Cloudflare Pages dashboard
         return NextResponse.json({
             success: false,
-            error: 'API key configuration is not supported in production. Please set OPENROUTER_API_KEY in Cloudflare Pages environment variables.'
+            error: 'API key configuration is not supported in production. Please set ARK_API_KEY or OPENROUTER_API_KEY in Cloudflare Pages environment variables.'
         }, { status: 400 });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error handling API key:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, ChevronDown, Clock } from 'lucide-react';
 import { youtubeClientProvider } from '@/lib/services/youtube-client-provider';
 import type { TranscriptItem, VideoMetadata } from '@/lib/services/transcript-provider';
-import { AI_MODELS, DEFAULT_MODEL } from '@/lib/constants/models';
+import { AI_MODELS, DEFAULT_MODEL, getModelProvider } from '@/lib/constants/models';
 import { fetchWithTimeout, FetchTimeoutError } from '@/lib/utils/fetch-with-timeout';
 
 const CONFIG_TIMEOUT_MS = 8000;
@@ -92,7 +92,8 @@ export default function Home() {
     try {
       const response = await fetchWithTimeout('/api/config', undefined, CONFIG_TIMEOUT_MS);
       const data = await response.json();
-      return data.hasApiKey;
+      const provider = getModelProvider(model);
+      return Boolean(data.providers?.[provider] ?? data.hasApiKey);
     } catch (error) {
       console.error('Failed to check API key:', error);
       return false;
@@ -138,7 +139,7 @@ export default function Home() {
     const hasKey = await checkApiKey();
     if (!hasKey) {
       setShowApiKeyModal(true);
-      setError('请先配置 OpenRouter API Key 才能开始创作');
+      setError(`请先配置 ${getModelProvider(model) === 'volcengine' ? '火山方舟 ARK_API_KEY' : 'OpenRouter API Key'} 才能开始创作`);
       return;
     }
 
@@ -375,9 +376,9 @@ export default function Home() {
       {showApiKeyModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
-            <h2 className="text-xl font-bold text-gray-900">配置 OpenRouter API Key</h2>
+            <h2 className="text-xl font-bold text-gray-900">配置 AI API Key</h2>
             <p className="text-sm text-gray-600">
-              首次使用需要配置 API Key。请访问{' '}
+              当前环境未配置所选模型的 API Key。火山方舟请在环境变量中设置 <code>ARK_API_KEY</code>；OpenRouter 请访问{' '}
               <a
                 href="https://openrouter.ai/keys"
                 target="_blank"
@@ -386,7 +387,7 @@ export default function Home() {
               >
                 OpenRouter
               </a>
-              {' '}获取您的 API Key。
+              {' '}获取 API Key。
             </p>
 
             <div className="space-y-2">
@@ -398,7 +399,7 @@ export default function Home() {
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-or-v1-..."
+                placeholder="ark-... 或 sk-or-v1-..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none text-sm"
                 autoFocus
               />
