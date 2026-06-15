@@ -133,6 +133,15 @@ async function resolveNodeBinary(): Promise<string | null> {
     ]);
 }
 
+async function resolveDenoBinary(): Promise<string | null> {
+    return resolveBinary('deno', [
+        process.env.DENO_BINARY_PATH ?? '',
+        '/usr/local/bin/deno',
+        '/usr/bin/deno',
+        '/opt/homebrew/bin/deno',
+    ]);
+}
+
 async function ensureYoutubeCookiesFile(): Promise<string | null> {
     const cookieFilePath = process.env.YOUTUBE_COOKIES_PATH?.trim();
     if (cookieFilePath && await fileExists(cookieFilePath, fs.constants.R_OK)) {
@@ -157,9 +166,12 @@ async function ensureYoutubeCookiesFile(): Promise<string | null> {
 async function buildYtDlpArgs(commandArgs: string[]): Promise<string[]> {
     const finalArgs: string[] = [];
     const cookiesPath = await ensureYoutubeCookiesFile();
+    const denoBinaryPath = await resolveDenoBinary();
     const nodeBinaryPath = await resolveNodeBinary();
 
-    if (nodeBinaryPath) {
+    if (denoBinaryPath) {
+        finalArgs.push('--js-runtimes', `deno:${denoBinaryPath}`);
+    } else if (nodeBinaryPath) {
         finalArgs.push('--js-runtimes', `node:${nodeBinaryPath}`);
     }
 
